@@ -1,7 +1,12 @@
 {
   "functions": {
     "api/webhook.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "promts.md"
+    },
+    "api/webhook/[token].js": {
+      "maxDuration": 60,
+      "includeFiles": "promts.md"
     },
     "api/setup.js": {
       "maxDuration": 60
