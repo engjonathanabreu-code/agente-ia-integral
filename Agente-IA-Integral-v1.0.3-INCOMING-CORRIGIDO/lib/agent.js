@@ -8,6 +8,10 @@ import {
   updateConversationAttributes,
 } from "./chatwoot.js";
 
+import {
+  transcriptionFromPayload,
+} from "./audio.js";
+
 
 const SECTORS = [
   "Atendimento",
@@ -51,40 +55,45 @@ const TEAM_ALIASES = {
     "pos-protocolo",
     "pós protocolo",
     "pos protocolo",
-    "pós protocolo e atualizações",
-    "pos protocolo e atualizacoes",
   ],
 };
 
 
-/*
-============================================
-NORMALIZA TEXTO
-============================================
-*/
-
-function normalize(value) {
-  return String(value || "")
+function normalize(
+  value
+) {
+  return String(
+    value || ""
+  )
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
     .toLowerCase()
     .trim();
 }
 
 
-function normalizeText(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
+function normalizeText(
+  value
+) {
+  return normalize(
+    value
+  ).replace(
+    /\s+/g,
+    " "
+  );
 }
 
 
-function firstName(fullName) {
+function firstName(
+  name
+) {
   return (
-    String(fullName || "")
+    String(
+      name || ""
+    )
       .trim()
       .split(/\s+/)[0] ||
     ""
@@ -93,16 +102,23 @@ function firstName(fullName) {
 
 
 /*
-============================================
-VALIDAÇÃO DE NOME
-============================================
+===========================================
+NOME
+===========================================
 */
 
-function validFullName(value) {
+function validFullName(
+  value
+) {
   const clean =
-    String(value || "")
+    String(
+      value || ""
+    )
       .trim()
-      .replace(/\s+/g, " ");
+      .replace(
+        /\s+/g,
+        " "
+      );
 
 
   if (
@@ -113,28 +129,18 @@ function validFullName(value) {
   }
 
 
-  const words =
+  if (
     clean
       .split(" ")
-      .filter(Boolean);
-
-
-  if (
-    words.length < 2
+      .filter(Boolean)
+      .length < 2
   ) {
     return false;
   }
 
 
   if (
-    /\d/.test(clean)
-  ) {
-    return false;
-  }
-
-
-  if (
-    !/^[A-Za-zÀ-ÿ'’\-\s]+$/.test(
+    /\d/.test(
       clean
     )
   ) {
@@ -142,443 +148,85 @@ function validFullName(value) {
   }
 
 
-  const normalized =
-    normalizeText(clean);
-
-
-  const invalidNames = [
-    "nao quero",
-    "não quero",
-    "nao sei",
-    "não sei",
-    "prefiro nao",
-    "prefiro não",
-    "quero atendimento",
-    "quero falar com alguem",
-    "quero falar com alguém",
-    "meu nome",
-    "nome completo",
-    "atendimento",
-    "financeiro",
-    "comercial",
-    "projetos",
-    "topografia",
-    "pos protocolo",
-    "pós protocolo",
-  ].map(
-    normalizeText
+  return /^[A-Za-zÀ-ÿ'’\-\s]+$/.test(
+    clean
   );
-
-
-  if (
-    invalidNames.includes(
-      normalized
-    )
-  ) {
-    return false;
-  }
-
-
-  return true;
 }
 
 
 /*
-============================================
-DETECÇÃO DE RECUSA DE CIDADE
-============================================
+===========================================
+CIDADE
+===========================================
 */
 
-function isCityRefusal(value) {
+function isCityRefusal(
+  value
+) {
   const text =
-    normalizeText(value);
+    normalizeText(
+      value
+    );
 
 
-  const exactRefusals = [
+  const invalid = [
     "nao",
-    "não",
     "nao quero",
-    "não quero",
-    "nao quero informar",
-    "não quero informar",
-    "nao vou informar",
-    "não vou informar",
     "prefiro nao",
-    "prefiro não",
-    "prefiro nao dizer",
-    "prefiro não dizer",
-    "prefiro nao informar",
-    "prefiro não informar",
-    "nao posso falar",
-    "não posso falar",
-    "nao vou falar",
-    "não vou falar",
-    "nao desejo informar",
-    "não desejo informar",
-    "nao desejo responder",
-    "não desejo responder",
-    "nao quero responder",
-    "não quero responder",
+    "nao vou informar",
+    "nao quero informar",
     "nao sei",
-    "não sei",
-    "sei nao",
-    "sei não",
     "nao lembro",
-    "não lembro",
-    "nao tenho",
-    "não tenho",
+    "tanto faz",
+    "qualquer",
     "nenhuma",
     "nenhum",
-    "qualquer",
-    "tanto faz",
-    "nao importa",
-    "não importa",
-    "isso nao importa",
-    "isso não importa",
-    "isso importa",
     "pra que",
     "para que",
     "por que",
     "porque",
-    "por quê",
-    "por que precisa",
-    "por que voce precisa",
-    "por que você precisa",
-    "pra que precisa",
-    "para que precisa",
-    "nao precisa",
-    "não precisa",
     "nao interessa",
-    "não interessa",
-    "isso e pessoal",
-    "isso é pessoal",
-    "informacao pessoal",
-    "informação pessoal",
     "nao te interessa",
-    "não te interessa",
-    "nao quero passar",
-    "não quero passar",
-    "nao vou passar",
-    "não vou passar",
+    "isso e pessoal",
+    "nao quero responder",
     "nao quero fornecer",
-    "não quero fornecer",
-    "sem cidade",
-    "nao tenho cidade",
-    "não tenho cidade",
+    "nao quero passar",
   ];
 
 
-  if (
-    exactRefusals.some(
-      (item) =>
-        text ===
-        normalizeText(item)
-    )
-  ) {
-    return true;
-  }
-
-
-  const refusalPrefixes = [
-    "nao quero ",
-    "não quero ",
-    "prefiro nao ",
-    "prefiro não ",
-    "nao vou ",
-    "não vou ",
-    "nao posso ",
-    "não posso ",
-    "nao desejo ",
-    "não desejo ",
-    "por que ",
-    "porque ",
-    "pra que ",
-    "para que ",
-  ];
-
-
-  if (
-    refusalPrefixes.some(
-      (prefix) =>
-        text.startsWith(
-          normalizeText(prefix)
-        )
-    )
-  ) {
-    return true;
-  }
-
-
-  return false;
+  return invalid.some(
+    (item) =>
+      text ===
+        normalizeText(
+          item
+        ) ||
+      text.startsWith(
+        `${normalizeText(
+          item
+        )} `
+      )
+  );
 }
 
 
-/*
-============================================
-RESPOSTAS QUE NÃO SÃO CIDADE
-============================================
-*/
-
-function isObviouslyInvalidCityAnswer(
+function validCity(
   value
 ) {
+  const clean =
+    String(
+      value || ""
+    )
+      .trim()
+      .replace(
+        /\s+/g,
+        " "
+      );
+
+
   const text =
-    normalizeText(value);
-
-
-  const invalidAnswers = [
-    "sim",
-    "nao",
-    "não",
-    "ok",
-    "okay",
-    "okk",
-    "okey",
-    "certo",
-    "beleza",
-    "blz",
-    "show",
-    "entendi",
-    "entendido",
-    "obrigado",
-    "obrigada",
-    "valeu",
-    "bom",
-    "boa",
-    "bom dia",
-    "boa tarde",
-    "boa noite",
-
-    "quero",
-    "quero ajuda",
-    "preciso de ajuda",
-    "ajuda",
-    "me ajuda",
-    "pode me ajudar",
-
-    "atendimento",
-    "atendente",
-    "humano",
-    "pessoa",
-    "falar com atendente",
-    "falar com humano",
-    "quero atendente",
-    "quero atendimento",
-    "quero falar com alguem",
-    "quero falar com alguém",
-    "quero falar com uma pessoa",
-
-    "comercial",
-    "vendas",
-    "financeiro",
-    "boleto",
-    "pagamento",
-    "parcelas",
-    "projetos",
-    "projeto",
-    "topografia",
-    "pos protocolo",
-    "pós protocolo",
-    "prefeitura",
-    "cartorio",
-    "cartório",
-    "registro de imoveis",
-    "registro de imóveis",
-
-    "qual setor",
-    "setor",
-    "menu",
-    "opcoes",
-    "opções",
-
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-
-    "primeiro",
-    "segundo",
-    "terceiro",
-    "quarto",
-    "quinto",
-    "sexto",
-
-    "agora",
-    "depois",
-    "amanha",
-    "amanhã",
-    "hoje",
-    "ontem",
-
-    "aqui",
-    "ali",
-    "la",
-    "lá",
-    "perto",
-    "longe",
-
-    "casa",
-    "minha casa",
-    "empresa",
-    "trabalho",
-    "escritorio",
-    "escritório",
-
-    "santa catarina",
-    "sc",
-    "parana",
-    "paraná",
-    "pr",
-    "rio grande do sul",
-    "rs",
-    "sao paulo",
-    "são paulo",
-    "sp",
-    "minas gerais",
-    "mg",
-    "rio de janeiro",
-    "rj",
-    "brasil",
-
-    "nao lembro",
-    "não lembro",
-    "nao sei",
-    "não sei",
-    "sei nao",
-    "sei não",
-
-    "nenhuma",
-    "nenhum",
-    "qualquer",
-    "tanto faz",
-
-    "teste",
-    "testando",
-    "asdf",
-    "asdfg",
-    "abc",
-    "abcde",
-    "xxx",
-    "xxxx",
-    "aaaa",
-    "bbbb",
-    "cidade",
-    "nome da cidade",
-  ];
-
-
-  return invalidAnswers
-    .map(normalizeText)
-    .includes(text);
-}
-
-
-/*
-============================================
-DETECTA FRASES QUE NÃO PARECEM CIDADE
-============================================
-*/
-
-function looksLikeSentenceInsteadOfCity(
-  value
-) {
-  const clean =
-    String(value || "")
-      .trim()
-      .replace(/\s+/g, " ");
-
-
-  const normalized =
-    normalizeText(clean);
-
-
-  /*
-  Cidade brasileira normalmente não
-  deve ter muitas palavras.
-  Exceções existem, então o limite
-  continua relativamente amplo.
-  */
-
-  const wordCount =
-    clean
-      .split(/\s+/)
-      .filter(Boolean)
-      .length;
-
-
-  if (
-    wordCount > 6
-  ) {
-    return true;
-  }
-
-
-  /*
-  Pergunta explícita
-  */
-
-  if (
-    clean.includes("?")
-  ) {
-    return true;
-  }
-
-
-  /*
-  Frases comuns
-  */
-
-  const sentenceMarkers = [
-    "eu quero",
-    "eu nao",
-    "eu não",
-    "eu preciso",
-    "eu moro",
-    "quero falar",
-    "quero saber",
-    "preciso falar",
-    "preciso saber",
-    "gostaria de",
-    "pode me",
-    "voce pode",
-    "você pode",
-    "me passa",
-    "me informe",
-    "me ajuda",
-    "me ajude",
-    "nao quero",
-    "não quero",
-    "nao sei",
-    "não sei",
-    "nao vou",
-    "não vou",
-  ];
-
-
-  return sentenceMarkers
-    .map(normalizeText)
-    .some(
-      (marker) =>
-        normalized.startsWith(
-          marker
-        )
+    normalizeText(
+      clean
     );
-}
-
-
-/*
-============================================
-VALIDAÇÃO PRINCIPAL DE CIDADE
-============================================
-*/
-
-function validCity(value) {
-  const clean =
-    String(value || "")
-      .trim()
-      .replace(/\s+/g, " ");
 
 
   if (
@@ -590,14 +238,7 @@ function validCity(value) {
 
 
   if (
-    isCityRefusal(clean)
-  ) {
-    return false;
-  }
-
-
-  if (
-    isObviouslyInvalidCityAnswer(
+    isCityRefusal(
       clean
     )
   ) {
@@ -605,8 +246,48 @@ function validCity(value) {
   }
 
 
+  const invalid = [
+    "sim",
+    "ok",
+    "beleza",
+    "blz",
+    "atendimento",
+    "comercial",
+    "financeiro",
+    "projetos",
+    "topografia",
+    "pos protocolo",
+    "atendente",
+    "humano",
+    "quero ajuda",
+    "preciso de ajuda",
+    "teste",
+    "cidade",
+    "brasil",
+    "sc",
+    "pr",
+    "rs",
+    "sp",
+    "mg",
+  ];
+
+
   if (
-    looksLikeSentenceInsteadOfCity(
+    invalid
+      .map(
+        normalizeText
+      )
+      .includes(
+        text
+      )
+  ) {
+    return false;
+  }
+
+
+  if (
+    clean.includes("?") ||
+    /\d{4,}/.test(
       clean
     )
   ) {
@@ -614,57 +295,73 @@ function validCity(value) {
   }
 
 
-  /*
-  Apenas números
-  */
-
-  if (
-    /^\d+$/.test(clean)
-  ) {
-    return false;
-  }
+  return /^[A-Za-zÀ-ÿ'’\-\s]+$/.test(
+    clean
+  );
+}
 
 
-  /*
-  CPF, telefone, CEP etc.
-  */
+/*
+===========================================
+ASSUNTO
+===========================================
+*/
 
-  if (
-    /\d{5,}/.test(clean)
-  ) {
-    return false;
-  }
-
-
-  /*
-  Cidade não deve conter
-  e-mail ou URL.
-  */
-
-  if (
-    clean.includes("@") ||
-    clean.includes("http://") ||
-    clean.includes("https://") ||
-    clean.includes("www.")
-  ) {
-    return false;
-  }
-
-
-  /*
-  Aceita letras, espaços,
-  hífen e apóstrofo.
-
-  Exemplos:
-  Rio do Sul
-  Presidente Getúlio
-  São João d'Oeste
-  Balneário Camboriú
-  */
-  if (
-    !/^[A-Za-zÀ-ÿ'’\-\s]+$/.test(
-      clean
+function validSubject(
+  value
+) {
+  const clean =
+    String(
+      value || ""
     )
+      .trim()
+      .replace(
+        /\s+/g,
+        " "
+      );
+
+
+  const text =
+    normalizeText(
+      clean
+    );
+
+
+  if (
+    clean.length < 4
+  ) {
+    return false;
+  }
+
+
+  const invalid = [
+    "nao sei",
+    "nao quero falar",
+    "nao quero dizer",
+    "nada",
+    "nenhum",
+    "nenhuma",
+    "qualquer coisa",
+    "sei la",
+    "tanto faz",
+    "sim",
+    "nao",
+    "ok",
+    "beleza",
+    "bom dia",
+    "boa tarde",
+    "boa noite",
+  ];
+
+
+  if (
+    invalid
+      .map(
+        normalizeText
+      )
+      .includes(
+        text
+      )
   ) {
     return false;
   }
@@ -675,16 +372,18 @@ function validCity(value) {
 
 
 /*
-============================================
-CLASSIFICAÇÃO DIRETA DE SETOR
-============================================
+===========================================
+SETOR DIRETO
+===========================================
 */
 
 function directSectorMatch(
   message
 ) {
   const t =
-    normalize(message);
+    normalizeText(
+      message
+    );
 
 
   const patterns = [
@@ -695,12 +394,8 @@ function directSectorMatch(
         "boleto",
         "parcela",
         "pagamento",
-        "pagar",
-        "cobranca",
-        "cobrança",
-        "divida",
-        "dívida",
         "pix",
+        "cobranca",
         "nota fiscal",
         "segunda via",
       ],
@@ -710,16 +405,10 @@ function directSectorMatch(
       "Topografia",
       [
         "topografia",
-        "topografo",
-        "topógrafo",
         "medicao",
-        "medição",
-        "medir terreno",
-        "levantamento de campo",
-        "levantamento topografico",
-        "levantamento topográfico",
-        "le pac",
-        "lepac",
+        "levantamento",
+        "topografo",
+        "campo",
       ],
     ],
 
@@ -727,16 +416,10 @@ function directSectorMatch(
       "Pós-Protocolo",
       [
         "pos protocolo",
-        "pós protocolo",
-        "protocolo na prefeitura",
         "processo protocolado",
-        "ja foi protocolado",
-        "já foi protocolado",
         "prefeitura",
-        "registro de imoveis",
-        "registro de imóveis",
         "cartorio",
-        "cartório",
+        "registro de imoveis",
         "crf",
       ],
     ],
@@ -748,8 +431,6 @@ function directSectorMatch(
         "planta",
         "memorial",
         "engenharia",
-        "correcao de projeto",
-        "correção de projeto",
       ],
     ],
 
@@ -758,15 +439,9 @@ function directSectorMatch(
       [
         "comercial",
         "orcamento",
-        "orçamento",
         "proposta",
         "contratar",
         "preco",
-        "preço",
-        "valor do servico",
-        "valor do serviço",
-        "novo servico",
-        "novo serviço",
         "vendas",
       ],
     ],
@@ -777,12 +452,7 @@ function directSectorMatch(
         "atendimento",
         "atendente",
         "humano",
-        "falar com alguem",
-        "falar com alguém",
         "duvida",
-        "dúvida",
-        "informacao geral",
-        "informação geral",
         "andamento",
       ],
     ],
@@ -790,14 +460,19 @@ function directSectorMatch(
 
 
   for (
-    const [sector, terms]
+    const [
+      sector,
+      terms,
+    ]
     of patterns
   ) {
     if (
       terms.some(
         (term) =>
           t.includes(
-            normalize(term)
+            normalizeText(
+              term
+            )
           )
       )
     ) {
@@ -808,13 +483,15 @@ function directSectorMatch(
 
   const numeric =
     t.match(
-      /^\s*([1-6])\s*$/
+      /^([1-6])$/
     )?.[1];
 
 
   if (numeric) {
     return SECTORS[
-      Number(numeric) - 1
+      Number(
+        numeric
+      ) - 1
     ];
   }
 
@@ -823,49 +500,31 @@ function directSectorMatch(
 }
 
 
-/*
-============================================
-CLASSIFICAÇÃO POR IA
-============================================
-*/
-
 async function aiSectorMatch(
   message
 ) {
-  const apiKey =
-    process.env.OPENAI_API_KEY;
-
-
-  if (!apiKey) {
-    throw new Error(
-      "OPENAI_API_KEY não configurada."
-    );
-  }
-
-
   const client =
     new OpenAI({
-      apiKey,
+      apiKey:
+        process.env.OPENAI_API_KEY,
     });
 
 
-  const model =
-    process.env.OPENAI_MODEL ||
-    "gpt-5";
-
-
-  const response =
+  const result =
     await client.responses.create({
-      model,
+      model:
+        process.env.OPENAI_MODEL ||
+        "gpt-5",
 
       reasoning: {
-        effort: "low",
+        effort:
+          "low",
       },
 
       instructions: `
-Você classifica mensagens de clientes da Integral Soluções em Engenharia.
+Classifique a solicitação do cliente da Integral Soluções em Engenharia.
 
-Escolha exatamente UM destes setores:
+Escolha apenas:
 
 Atendimento
 Comercial
@@ -875,31 +534,25 @@ Topografia
 Pós-Protocolo
 INDEFINIDO
 
-Regras:
+Financeiro:
+boletos, parcelas, pagamento, cobrança, PIX, nota fiscal.
 
-- Financeiro:
-pagamentos, boletos, parcelas, cobranças, notas fiscais, segunda via e dúvidas financeiras.
+Comercial:
+orçamento, proposta, preço, contratação e novos serviços.
 
-- Comercial:
-orçamento, contratação, proposta, preço, novos serviços e vendas.
+Projetos:
+plantas, memoriais e projetos técnicos.
 
-- Projetos:
-projeto técnico, planta, memorial, correções técnicas e elaboração de projetos.
+Topografia:
+levantamentos, medições, campo e topografia.
 
-- Topografia:
-medição de campo, levantamento topográfico, equipe de campo, marcação e atividades topográficas.
+Pós-Protocolo:
+somente processos já protocolados, prefeitura, cartório, Registro de Imóveis ou CRF.
 
-- Pós-Protocolo:
-SOMENTE quando existir indicação de que o processo já foi protocolado OU quando tratar claramente de prefeitura, cartório, Registro de Imóveis ou CRF no contexto posterior ao protocolo.
+Atendimento:
+dúvidas gerais e andamento sem indicação clara de protocolo.
 
-- Atendimento:
-demandas gerais, pedido explícito de atendente, dúvidas gerais e pedidos genéricos de andamento quando não houver indicação clara de que o processo já foi protocolado.
-
-- Se não houver informação suficiente, responda INDEFINIDO.
-
-Responda somente com o nome exato do setor.
-Não explique.
-Não use pontuação.
+Responda somente o setor.
 `,
 
       input:
@@ -911,7 +564,7 @@ Não use pontuação.
 
   const answer =
     String(
-      response.output_text ||
+      result.output_text ||
       ""
     ).trim();
 
@@ -923,12 +576,6 @@ Não use pontuação.
     : null;
 }
 
-
-/*
-============================================
-CLASSIFICAÇÃO FINAL
-============================================
-*/
 
 async function classifySector(
   message
@@ -945,9 +592,80 @@ async function classifySector(
 
 
 /*
-============================================
-LOCALIZA TIME
-============================================
+===========================================
+INTERPRETA TEXTO OU ÁUDIO
+===========================================
+*/
+
+async function extractCustomerText(
+  payload
+) {
+  const text =
+    String(
+      payload?.content ||
+      ""
+    ).trim();
+
+
+  if (text) {
+    return {
+      text,
+      source:
+        "text",
+    };
+  }
+
+
+  try {
+    const transcription =
+      await transcriptionFromPayload(
+        payload
+      );
+
+
+    if (transcription) {
+      console.log(
+        "Áudio transcrito",
+        {
+          message_id:
+            payload?.id,
+
+          transcription,
+        }
+      );
+
+
+      return {
+        text:
+          transcription,
+
+        source:
+          "audio",
+      };
+    }
+
+  } catch (error) {
+    console.error(
+      "Erro na transcrição:",
+      error
+    );
+  }
+
+
+  return {
+    text:
+      "",
+
+    source:
+      "unknown",
+  };
+}
+
+
+/*
+===========================================
+TIME
+===========================================
 */
 
 async function findTeamIdForSector(
@@ -958,56 +676,59 @@ async function findTeamIdForSector(
 
 
   const aliases =
-    TEAM_ALIASES[sector] ||
-    [sector];
-
-
-  const normalizedAliases =
-    aliases.map(
-      normalize
-    );
+    TEAM_ALIASES[
+      sector
+    ] || [
+      sector,
+    ];
 
 
   const found =
     (teams || []).find(
       (team) => {
-
-        const name =
+        const teamName =
           normalize(
             team.name
           );
 
 
-        return normalizedAliases.some(
+        return aliases.some(
           (alias) =>
-            name === alias ||
-            name.includes(
-              alias
+            teamName.includes(
+              normalize(
+                alias
+              )
             )
         );
       }
     );
 
 
-  return found?.id ||
-    null;
+  return (
+    found?.id ||
+    null
+  );
 }
 
 
 /*
-============================================
+===========================================
 MENU
-============================================
+===========================================
 */
 
-function menuText(name) {
-  const greeting =
+function menuText(
+  name
+) {
+  const prefix =
     name
-      ? `${firstName(name)}, `
+      ? `${firstName(
+          name
+        )}, `
       : "";
 
 
-  return `${greeting}com qual setor você deseja falar?
+  return `${prefix}com qual setor você deseja falar?
 
 1. Atendimento
 2. Comercial
@@ -1016,20 +737,21 @@ function menuText(name) {
 5. Topografia
 6. Pós-Protocolo
 
-Você também pode escrever com suas palavras o que precisa.`;
+Você também pode escrever ou enviar um áudio explicando o que precisa.`;
 }
 
 
 /*
-============================================
-ENCAMINHAMENTO
-============================================
+===========================================
+ENCAMINHA APÓS COLETAR ASSUNTO
+===========================================
 */
 
 async function handoffToSector(
   conversationId,
   attrs,
-  sector
+  sector,
+  subject
 ) {
   const teamId =
     await findTeamIdForSector(
@@ -1051,7 +773,9 @@ async function handoffToSector(
       assigned =
         true;
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Falha ao atribuir equipe:",
         error.message
@@ -1068,6 +792,9 @@ async function handoffToSector(
       ia_setor:
         sector,
 
+      ia_assunto:
+        subject,
+
       ia_etapa:
         "encaminhado",
 
@@ -1083,21 +810,15 @@ async function handoffToSector(
     );
 
 
-  const prefix =
-    name
-      ? `${name}, `
-      : "";
-
-
-  const message =
-    assigned
-      ? `${prefix}obrigado. Identifiquei que seu atendimento é com o setor de ${sector}. Encaminhei sua conversa para a equipe responsável, que dará continuidade por aqui.`
-      : `${prefix}obrigado. Identifiquei que seu atendimento é com o setor de ${sector}. Sua solicitação foi registrada e a equipe responsável dará continuidade por aqui.`;
-
-
   await sendMessage(
     conversationId,
-    message
+    `${name ? `${name}, ` : ""}obrigado. Já registrei o motivo do seu contato e encaminhei seu atendimento para o setor de ${sector}.
+
+A equipe responsável receberá sua solicitação com estas informações:
+
+“${subject}”
+
+Agora é só aguardar a continuidade do atendimento por aqui.`
   );
 
 
@@ -1107,15 +828,17 @@ async function handoffToSector(
 
     sector,
 
+    subject,
+
     assigned,
   };
 }
 
 
 /*
-============================================
+===========================================
 CONVERSA RESOLVIDA
-============================================
+===========================================
 */
 
 export async function handleConversationStatusChanged(
@@ -1123,15 +846,13 @@ export async function handleConversationStatusChanged(
 ) {
   const conversationId =
     payload?.conversation?.id ||
-    payload?.id ||
-    payload?.conversation?.display_id;
+    payload?.id;
 
 
   if (!conversationId) {
     return {
-      ignored: true,
-      reason:
-        "conversation_id_missing",
+      ignored:
+        true,
     };
   }
 
@@ -1149,10 +870,8 @@ export async function handleConversationStatusChanged(
     "resolved"
   ) {
     return {
-      ignored: true,
-      reason:
-        "status_not_resolved",
-      status,
+      ignored:
+        true,
     };
   }
 
@@ -1168,18 +887,15 @@ export async function handleConversationStatusChanged(
     {};
 
 
-  const wasHandedOff =
-    attrs.ia_atendimento_concluido ===
-      true ||
-    attrs.ia_etapa ===
-      "encaminhado";
-
-
-  if (!wasHandedOff) {
+  if (
+    attrs.ia_atendimento_concluido !==
+      true &&
+    attrs.ia_etapa !==
+      "encaminhado"
+  ) {
     return {
-      ignored: true,
-      reason:
-        "not_an_ai_handoff",
+      ignored:
+        true,
     };
   }
 
@@ -1199,9 +915,6 @@ export async function handleConversationStatusChanged(
 
 
   return {
-    stage:
-      "retorno",
-
     rearmed:
       true,
   };
@@ -1209,9 +922,9 @@ export async function handleConversationStatusChanged(
 
 
 /*
-============================================
-PROCESSAMENTO DE MENSAGEM
-============================================
+===========================================
+ENTRADA PRINCIPAL
+===========================================
 */
 
 export async function handleIncomingMessage(
@@ -1224,23 +937,35 @@ export async function handleIncomingMessage(
 
   if (!conversationId) {
     throw new Error(
-      "conversation.id não encontrado no webhook."
+      "conversation.id não encontrado."
     );
   }
 
 
+  const extracted =
+    await extractCustomerText(
+      payload
+    );
+
+
   const text =
-    String(
-      payload.content ||
-      ""
-    ).trim();
+    extracted.text;
 
 
   if (!text) {
+
+    await sendMessage(
+      conversationId,
+      "Não consegui interpretar essa mensagem. Você pode escrever sua solicitação ou enviar novamente o áudio?"
+    );
+
+
     return {
-      ignored: true,
+      ignored:
+        true,
+
       reason:
-        "empty_message",
+        "unreadable_message",
     };
   }
 
@@ -1262,9 +987,7 @@ export async function handleIncomingMessage(
 
 
   /*
-  ============================================
-  HUMANO ATENDENDO
-  ============================================
+  HUMANO ATIVO
   */
 
   if (
@@ -1274,7 +997,9 @@ export async function handleIncomingMessage(
       "encaminhado"
   ) {
     return {
-      ignored: true,
+      ignored:
+        true,
+
       reason:
         "human_handoff_active",
     };
@@ -1282,81 +1007,13 @@ export async function handleIncomingMessage(
 
 
   /*
-  ============================================
-  RETORNO DO CLIENTE
-  ============================================
+  RETORNO
   */
 
   if (
     stage ===
     "retorno"
   ) {
-
-    if (!attrs.ia_nome) {
-
-      await updateConversationAttributes(
-        conversationId,
-        {
-          ...attrs,
-
-          ia_etapa:
-            "nome",
-
-          ia_atendimento_concluido:
-            false,
-        }
-      );
-
-
-      await sendMessage(
-        conversationId,
-        "Olá novamente! 👋 Para retomarmos seu atendimento, por favor, informe seu nome completo."
-      );
-
-
-      return {
-        stage:
-          "nome",
-
-        return_flow:
-          true,
-      };
-    }
-
-
-    if (!attrs.ia_cidade) {
-
-      await updateConversationAttributes(
-        conversationId,
-        {
-          ...attrs,
-
-          ia_etapa:
-            "cidade",
-
-          ia_atendimento_concluido:
-            false,
-        }
-      );
-
-
-      await sendMessage(
-        conversationId,
-        `${firstName(
-          attrs.ia_nome
-        )}, que bom falar com você novamente. Me informe a cidade relacionada ao atendimento, por favor.`
-      );
-
-
-      return {
-        stage:
-          "cidade",
-
-        return_flow:
-          true,
-      };
-    }
-
 
     const sector =
       await classifySector(
@@ -1365,11 +1022,40 @@ export async function handleIncomingMessage(
 
 
     if (sector) {
-      return handoffToSector(
+
+      await updateConversationAttributes(
         conversationId,
-        attrs,
-        sector
+        {
+          ...attrs,
+
+          ia_setor:
+            sector,
+
+          ia_assunto:
+            "",
+
+          ia_etapa:
+            "assunto",
+        }
       );
+
+
+      await sendMessage(
+        conversationId,
+        `${firstName(
+          attrs.ia_nome
+        )}, entendi. Vou direcionar seu atendimento para ${sector}.
+
+Antes de encaminhar, me conte brevemente sobre o que você gostaria de falar. Você pode escrever ou enviar um áudio.`
+      );
+
+
+      return {
+        stage:
+          "assunto",
+
+        sector,
+      };
     }
 
 
@@ -1380,39 +1066,27 @@ export async function handleIncomingMessage(
 
         ia_etapa:
           "setor",
-
-        ia_atendimento_concluido:
-          false,
       }
     );
 
 
     await sendMessage(
       conversationId,
-      `${firstName(
+      menuText(
         attrs.ia_nome
-      )}, que bom falar com você novamente. 👋
-
-${menuText(
-  attrs.ia_nome
-)}`
+      )
     );
 
 
     return {
       stage:
         "setor",
-
-      return_flow:
-        true,
     };
   }
 
 
   /*
-  ============================================
-  PRIMEIRO CONTATO
-  ============================================
+  INÍCIO
   */
 
   if (
@@ -1448,9 +1122,7 @@ ${menuText(
 
 
   /*
-  ============================================
   NOME
-  ============================================
   */
 
   if (
@@ -1466,7 +1138,7 @@ ${menuText(
 
       await sendMessage(
         conversationId,
-        "Para eu registrar seu atendimento corretamente, preciso do seu nome completo. Por favor, informe seu nome e sobrenome."
+        "Para registrar seu atendimento corretamente, preciso do seu nome completo. Por favor, informe nome e sobrenome."
       );
 
 
@@ -1476,9 +1148,6 @@ ${menuText(
 
         retry:
           true,
-
-        reason:
-          "invalid_name",
       };
     }
 
@@ -1522,9 +1191,7 @@ ${menuText(
 
 
   /*
-  ============================================
   CIDADE
-  ============================================
   */
 
   if (
@@ -1532,64 +1199,19 @@ ${menuText(
     "cidade"
   ) {
 
-    /*
-    Cliente recusou
-    */
-
-    if (
-      isCityRefusal(
-        text
-      )
-    ) {
-
-      const name =
-        firstName(
-          attrs.ia_nome
-        );
-
-
-      await sendMessage(
-        conversationId,
-        `${name ? `${name}, ` : ""}entendo. 😊 A cidade é necessária para que eu consiga direcionar seu atendimento corretamente para a equipe responsável.
-
-Por favor, me informe apenas o nome da cidade relacionada ao atendimento.`
-      );
-
-
-      return {
-        stage:
-          "cidade",
-
-        retry:
-          true,
-
-        reason:
-          "city_refused",
-      };
-    }
-
-
-    /*
-    Resposta inválida
-    */
-
     if (
       !validCity(
         text
       )
     ) {
 
-      const name =
-        firstName(
-          attrs.ia_nome
-        );
-
-
       await sendMessage(
         conversationId,
-        `${name ? `${name}, ` : ""}não consegui identificar uma cidade nessa resposta.
+        `${firstName(
+          attrs.ia_nome
+        )}, preciso da cidade relacionada ao atendimento para conseguir direcioná-lo corretamente.
 
-Por favor, informe apenas o nome da cidade relacionada ao atendimento, por exemplo: Ibirama, Rio do Sul, Blumenau ou Florianópolis.`
+Por favor, informe apenas o nome da cidade.`
       );
 
 
@@ -1599,24 +1221,12 @@ Por favor, informe apenas o nome da cidade relacionada ao atendimento, por exemp
 
         retry:
           true,
-
-        reason:
-          "invalid_city",
       };
     }
 
 
-    /*
-    Cidade válida
-    */
-
     const city =
-      text
-        .replace(
-          /\s+/g,
-          " "
-        )
-        .trim();
+      text.trim();
 
 
     await updateConversationAttributes(
@@ -1644,16 +1254,12 @@ Por favor, informe apenas o nome da cidade relacionada ao atendimento, por exemp
     return {
       stage:
         "setor",
-
-      city,
     };
   }
 
 
   /*
-  ============================================
   SETOR
-  ============================================
   */
 
   if (
@@ -1689,18 +1295,134 @@ ${menuText(
     }
 
 
-    return handoffToSector(
+    /*
+    NOVA ETAPA:
+    NÃO ENCAMINHA AINDA.
+    */
+
+    await updateConversationAttributes(
       conversationId,
-      attrs,
-      sector
+      {
+        ...attrs,
+
+        ia_setor:
+          sector,
+
+        ia_assunto:
+          "",
+
+        ia_etapa:
+          "assunto",
+      }
     );
+
+
+    await sendMessage(
+      conversationId,
+      `${firstName(
+        attrs.ia_nome
+      )}, certo. Vou direcionar seu atendimento para o setor de ${sector}.
+
+Antes de encaminhar, me conte brevemente sobre o que você gostaria de falar. Você pode escrever ou enviar um áudio.`
+    );
+
+
+    return {
+      stage:
+        "assunto",
+
+      sector,
+    };
   }
 
 
   /*
   ============================================
-  FALLBACK
+  NOVA ETAPA: ASSUNTO
   ============================================
+  */
+
+  if (
+    stage ===
+    "assunto"
+  ) {
+
+    if (
+      !validSubject(
+        text
+      )
+    ) {
+
+      await sendMessage(
+        conversationId,
+        `${firstName(
+          attrs.ia_nome
+        )}, preciso de uma breve descrição para que o atendente já receba seu atendimento com o contexto correto.
+
+Por exemplo: “Preciso da segunda via do boleto” ou “Quero saber quando será realizada a topografia”.
+
+Pode escrever ou enviar um áudio.`
+      );
+
+
+      return {
+        stage:
+          "assunto",
+
+        retry:
+          true,
+      };
+    }
+
+
+    const sector =
+      attrs.ia_setor ||
+      await classifySector(
+        text
+      );
+
+
+    if (!sector) {
+
+      await updateConversationAttributes(
+        conversationId,
+        {
+          ...attrs,
+
+          ia_etapa:
+            "setor",
+        }
+      );
+
+
+      await sendMessage(
+        conversationId,
+        `Antes de encaminhar, preciso identificar o setor correto.
+
+${menuText(
+  attrs.ia_nome
+)}`
+      );
+
+
+      return {
+        stage:
+          "setor",
+      };
+    }
+
+
+    return handoffToSector(
+      conversationId,
+      attrs,
+      sector,
+      text
+    );
+  }
+
+
+  /*
+  FALLBACK
   */
 
   await updateConversationAttributes(
