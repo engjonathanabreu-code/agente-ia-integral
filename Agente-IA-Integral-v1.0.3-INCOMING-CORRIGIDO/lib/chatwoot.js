@@ -44,7 +44,6 @@ async function cwFetch(
   path,
   options = {}
 ) {
-
   const response =
     await fetch(
       `${base()}${path}`,
@@ -80,7 +79,6 @@ async function cwFetch(
 
 
   if (!response.ok) {
-
     const error =
       new Error(
         `Chatwoot ${response.status}: ${
@@ -107,7 +105,6 @@ async function cwFetch(
 export async function getConversation(
   conversationId
 ) {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/conversations/${conversationId}`
   );
@@ -118,7 +115,6 @@ export async function sendMessage(
   conversationId,
   content
 ) {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/conversations/${conversationId}/messages`,
     {
@@ -127,11 +123,25 @@ export async function sendMessage(
       body: JSON.stringify({
         content,
 
-        message_type: "outgoing",
+        message_type:
+          "outgoing",
 
-        private: false,
+        private:
+          false,
 
-        content_type: "text",
+        content_type:
+          "text",
+
+        /*
+        IMPORTANTE
+
+        Esta marca permite que o Chatwoot
+        diferencie mensagens enviadas pela IA
+        das mensagens digitadas por humanos.
+        */
+        content_attributes: {
+          integral_ai: true,
+        },
       }),
     }
   );
@@ -142,7 +152,6 @@ export async function updateConversationAttributes(
   conversationId,
   attributes
 ) {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/conversations/${conversationId}/custom_attributes`,
     {
@@ -158,7 +167,6 @@ export async function updateConversationAttributes(
 
 
 export async function listTeams() {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/teams`
   );
@@ -169,7 +177,6 @@ export async function createTeam(
   name,
   description
 ) {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/teams`,
     {
@@ -180,7 +187,8 @@ export async function createTeam(
 
         description,
 
-        allow_auto_assign: true,
+        allow_auto_assign:
+          true,
       }),
     }
   );
@@ -191,7 +199,6 @@ export async function assignConversationToTeam(
   conversationId,
   teamId
 ) {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/conversations/${conversationId}/assignments`,
     {
@@ -207,7 +214,6 @@ export async function assignConversationToTeam(
 
 
 export async function listCustomAttributeDefinitions() {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/custom_attribute_definitions`
   );
@@ -217,14 +223,12 @@ export async function listCustomAttributeDefinitions() {
 export async function createConversationAttribute(
   definition
 ) {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/custom_attribute_definitions`,
     {
       method: "POST",
 
       body: JSON.stringify({
-
         attribute_display_name:
           definition.name,
 
@@ -240,7 +244,8 @@ export async function createConversationAttribute(
         attribute_values:
           definition.values || [],
 
-        attribute_model: 0,
+        attribute_model:
+          0,
       }),
     }
   );
@@ -248,28 +253,21 @@ export async function createConversationAttribute(
 
 
 export async function listWebhooks() {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/webhooks`
   );
 }
 
 
-/*
-NOVO WEBHOOK
-*/
-
 export async function createWebhook(
   url
 ) {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/webhooks`,
     {
       method: "POST",
 
       body: JSON.stringify({
-
         name:
           "Agente IA Integral",
 
@@ -278,6 +276,8 @@ export async function createWebhook(
         subscriptions: [
           "message_created",
           "conversation_status_changed",
+          "conversation_updated",
+          "conversation_created",
         ],
       }),
     }
@@ -285,22 +285,16 @@ export async function createWebhook(
 }
 
 
-/*
-ATUALIZA WEBHOOK EXISTENTE
-*/
-
 export async function updateWebhook(
   webhookId,
   url
 ) {
-
   return cwFetch(
     `/api/v1/accounts/${accountId()}/webhooks/${webhookId}`,
     {
       method: "PATCH",
 
       body: JSON.stringify({
-
         name:
           "Agente IA Integral",
 
@@ -309,6 +303,8 @@ export async function updateWebhook(
         subscriptions: [
           "message_created",
           "conversation_status_changed",
+          "conversation_updated",
+          "conversation_created",
         ],
       }),
     }
