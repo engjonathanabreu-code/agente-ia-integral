@@ -9,6 +9,12 @@ import {
 } from "../lib/chatwoot.js";
 
 
+/*
+============================================
+ATRIBUTOS PERSONALIZADOS DA CONVERSA
+============================================
+*/
+
 const attributes = [
   {
     key: "ia_etapa",
@@ -16,24 +22,28 @@ const attributes = [
     description:
       "Etapa atual do atendimento inicial da IA.",
   },
+
   {
     key: "ia_nome",
     name: "IA — Nome completo",
     description:
       "Nome informado pelo cliente durante a triagem.",
   },
+
   {
     key: "ia_cidade",
     name: "IA — Cidade",
     description:
       "Cidade informada pelo cliente durante a triagem.",
   },
+
   {
     key: "ia_setor",
     name: "IA — Setor",
     description:
       "Setor classificado pelo agente de IA.",
   },
+
   {
     key: "ia_atendimento_concluido",
     name: "IA — Triagem concluída",
@@ -44,33 +54,50 @@ const attributes = [
 ];
 
 
+/*
+============================================
+EQUIPES DO CHATWOOT
+============================================
+*/
+
 const teams = [
   [
     "Atendimento",
     "Atendimento geral e triagem humana.",
   ],
+
   [
     "Comercial",
     "Novos serviços, propostas e oportunidades comerciais.",
   ],
+
   [
     "Financeiro",
     "Pagamentos, boletos, parcelas e assuntos financeiros.",
   ],
+
   [
     "Projetos",
     "Elaboração e dúvidas relacionadas a projetos técnicos.",
   ],
+
   [
     "Topografia",
     "Levantamentos, medições e atividades de campo.",
   ],
+
   [
     "Pós-Protocolo",
     "Andamentos após protocolo, prefeitura, cartório e registro.",
   ],
 ];
 
+
+/*
+============================================
+RESPOSTA JSON
+============================================
+*/
 
 function json(res, status, body) {
   res.statusCode = status;
@@ -89,6 +116,12 @@ function json(res, status, body) {
   );
 }
 
+
+/*
+============================================
+CONVERTE RESPOSTAS DA API EM ARRAY
+============================================
+*/
 
 function asArray(value) {
   if (Array.isArray(value)) {
@@ -123,6 +156,12 @@ function asArray(value) {
 }
 
 
+/*
+============================================
+NORMALIZA URL
+============================================
+*/
+
 function normalizeUrl(url) {
   return String(url || "")
     .trim()
@@ -130,20 +169,38 @@ function normalizeUrl(url) {
 }
 
 
+/*
+============================================
+HANDLER PRINCIPAL
+============================================
+*/
+
 export default async function handler(
   req,
   res
 ) {
+
+  /*
+  Somente POST
+  */
+
   if (req.method !== "POST") {
     return json(
       res,
       405,
       {
+        ok: false,
         error: "Method not allowed",
       }
     );
   }
 
+
+  /*
+  ============================================
+  SEGURANÇA DO SETUP
+  ============================================
+  */
 
   const auth =
     req.headers.authorization ||
@@ -159,6 +216,7 @@ export default async function handler(
       res,
       401,
       {
+        ok: false,
         error: "Setup não autorizado.",
       }
     );
@@ -166,9 +224,10 @@ export default async function handler(
 
 
   try {
+
     /*
     ============================================
-    ATRIBUTOS PERSONALIZADOS
+    1. ATRIBUTOS PERSONALIZADOS
     ============================================
     */
 
@@ -176,9 +235,13 @@ export default async function handler(
       await listCustomAttributeDefinitions();
 
 
+    const existingAttrList =
+      asArray(existingAttrs);
+
+
     const existingKeys =
       new Set(
-        asArray(existingAttrs).map(
+        existingAttrList.map(
           (item) =>
             item.attribute_key
         )
@@ -192,30 +255,35 @@ export default async function handler(
       const definition
       of attributes
     ) {
+
       if (
-        !existingKeys.has(
+        existingKeys.has(
           definition.key
         )
       ) {
-        const created =
-          await createConversationAttribute(
-            definition
-          );
-
-        attrsCreated.push({
-          key:
-            definition.key,
-
-          id:
-            created?.id,
-        });
+        continue;
       }
+
+
+      const created =
+        await createConversationAttribute(
+          definition
+        );
+
+
+      attrsCreated.push({
+        key:
+          definition.key,
+
+        id:
+          created?.id,
+      });
     }
 
 
     /*
     ============================================
-    EQUIPES
+    2. EQUIPES
     ============================================
     */
 
@@ -223,14 +291,16 @@ export default async function handler(
       await listTeams();
 
 
+    const currentTeamList =
+      asArray(currentTeams);
+
+
     const normalizedTeams =
       new Map(
-        asArray(
-          currentTeams
-        ).map(
+        currentTeamList.map(
           (team) => [
             String(
-              team.name || ""
+              team?.name || ""
             )
               .trim()
               .toLowerCase(),
@@ -250,11 +320,17 @@ export default async function handler(
         description,
       ] of teams
     ) {
+
       let team =
         normalizedTeams.get(
           name.toLowerCase()
         );
 
+
+      /*
+      Cria equipe somente se
+      ela realmente não existir.
+      */
 
       if (!team) {
         team =
@@ -278,7 +354,7 @@ export default async function handler(
 
     /*
     ============================================
-    CONFIGURAÇÃO DO WEBHOOK
+    3. CONFIGURAÇÕES DO WEBHOOK
     ============================================
     */
 
@@ -286,22 +362,31 @@ export default async function handler(
       String(
         process.env.APP_URL ||
         ""
-      ).replace(
-        /\/+$/,
-        ""
-      );
+      )
+        .trim()
+        .replace(
+          /\/+$/,
+          ""
+        );
 
 
     const webhookToken =
-      process.env.WEBHOOK_TOKEN;
+      String(
+        process.env.WEBHOOK_TOKEN ||
+        ""
+      ).trim();
 
 
-    if (
-      !appUrl ||
-      !webhookToken
-    ) {
+    if (!appUrl) {
       throw new Error(
-        "APP_URL e WEBHOOK_TOKEN são obrigatórios para o setup."
+        "APP_URL não configurada."
+      );
+    }
+
+
+    if (!webhookToken) {
+      throw new Error(
+        "WEBHOOK_TOKEN não configurado."
       );
     }
 
@@ -313,7 +398,9 @@ export default async function handler(
 
 
     /*
-    Busca todos os webhooks atuais
+    ============================================
+    4. LISTA WEBHOOKS EXISTENTES
+    ============================================
     */
 
     const existingWebhooks =
@@ -326,26 +413,58 @@ export default async function handler(
       );
 
 
+    console.log(
+      "Webhooks encontrados no Chatwoot:",
+      allWebhooks.map(
+        (item) => ({
+          id:
+            item?.id,
+
+          name:
+            item?.name,
+
+          url:
+            item?.url,
+
+          subscriptions:
+            item?.subscriptions,
+        })
+      )
+    );
+
+
     /*
-    Primeiro tenta localizar exatamente
-    pela URL, ignorando barra final.
+    ============================================
+    5. PROCURA WEBHOOK PELA URL EXATA
+    ============================================
     */
 
     let webhook =
       allWebhooks.find(
         (item) =>
-          normalizeUrl(item?.url) ===
-          normalizeUrl(webhookUrl)
+          normalizeUrl(
+            item?.url
+          ) ===
+          normalizeUrl(
+            webhookUrl
+          )
       );
 
 
+    let webhookMatchMethod =
+      webhook
+        ? "exact_url"
+        : null;
+
+
     /*
-    Caso não encontre pela URL,
-    tenta localizar pelo nome do agente.
-    Isso evita criar webhook duplicado.
+    ============================================
+    6. PROCURA PELO NOME
+    ============================================
     */
 
     if (!webhook) {
+
       webhook =
         allWebhooks.find(
           (item) =>
@@ -358,85 +477,175 @@ export default async function handler(
                 "agente ia integral"
               )
         );
+
+
+      if (webhook) {
+        webhookMatchMethod =
+          "name";
+      }
     }
 
 
     /*
-    Caso ainda não tenha encontrado,
-    tenta localizar qualquer webhook
-    apontando para /api/webhook/
-    do mesmo APP_URL.
+    ============================================
+    7. PROCURA WEBHOOK DO MESMO APP
+    ============================================
     */
 
     if (!webhook) {
+
       webhook =
         allWebhooks.find(
           (item) => {
-            const url =
+
+            const currentUrl =
               normalizeUrl(
                 item?.url
               );
 
+
             return (
-              url.startsWith(
-                normalizeUrl(appUrl)
+              currentUrl.startsWith(
+                normalizeUrl(
+                  appUrl
+                )
               ) &&
-              url.includes(
-                "/api/webhook/"
+              currentUrl.includes(
+                "/api/webhook"
               )
             );
           }
         );
+
+
+      if (webhook) {
+        webhookMatchMethod =
+          "same_app";
+      }
     }
 
 
     /*
     ============================================
-    SE O WEBHOOK JÁ EXISTE:
-    ATUALIZA URL E SUBSCRIPTIONS
+    8. CASO EXISTA APENAS UM WEBHOOK
+    ============================================
+
+    Se a conta possuir somente um webhook,
+    usamos esse webhook em vez de tentar
+    criar outro.
+
+    Isso evita o erro:
+
+    Url has already been taken
+    */
+
+    if (
+      !webhook &&
+      allWebhooks.length === 1
+    ) {
+
+      webhook =
+        allWebhooks[0];
+
+      webhookMatchMethod =
+        "single_webhook";
+    }
+
+
+    /*
+    ============================================
+    9. ATUALIZA WEBHOOK EXISTENTE
     ============================================
     */
 
+    let webhookAction =
+      null;
+
+
     if (webhook) {
+
+      console.log(
+        "Webhook existente encontrado.",
+        {
+          id:
+            webhook.id,
+
+          url:
+            webhook.url,
+
+          method:
+            webhookMatchMethod,
+        }
+      );
+
+
       webhook =
         await updateWebhook(
           webhook.id,
           webhookUrl
         );
-    } else {
-      /*
-      ============================================
-      SÓ CRIA SE NÃO EXISTIR
-      ============================================
-      */
+
+
+      webhookAction =
+        "updated";
+    }
+
+
+    /*
+    ============================================
+    10. NÃO ENCONTROU WEBHOOK
+    ============================================
+    */
+
+    else {
+
+      console.log(
+        "Nenhum webhook encontrado pela listagem. Tentando criar."
+      );
+
 
       try {
+
         webhook =
           await createWebhook(
             webhookUrl
           );
-      } catch (error) {
-        /*
-        Fallback para o caso de o Chatwoot
-        responder 422 "Url has already been taken".
 
-        Nesse caso, lista novamente os webhooks
-        e tenta localizar a URL existente.
+
+        webhookAction =
+          "created";
+
+      } catch (createError) {
+
+        /*
+        ========================================
+        CHATWOOT RETORNOU URL DUPLICADA
+        ========================================
         */
 
-        const isDuplicateUrl =
-          error?.status === 422 ||
+        const duplicateUrl =
+          createError?.status === 422 ||
           String(
-            error?.message || ""
+            createError?.message ||
+            ""
           ).includes(
             "Url has already been taken"
           );
 
 
-        if (!isDuplicateUrl) {
-          throw error;
+        if (!duplicateUrl) {
+          throw createError;
         }
 
+
+        console.warn(
+          "Chatwoot informou que a URL já existe. Refazendo a listagem."
+        );
+
+
+        /*
+        Lista novamente depois do 422.
+        */
 
         const refreshedWebhooks =
           await listWebhooks();
@@ -448,7 +657,31 @@ export default async function handler(
           );
 
 
-        const existingDuplicate =
+        console.log(
+          "Nova listagem de webhooks:",
+          refreshedList.map(
+            (item) => ({
+              id:
+                item?.id,
+
+              name:
+                item?.name,
+
+              url:
+                item?.url,
+
+              subscriptions:
+                item?.subscriptions,
+            })
+          )
+        );
+
+
+        /*
+        Procura novamente pela URL.
+        */
+
+        let duplicateWebhook =
           refreshedList.find(
             (item) =>
               normalizeUrl(
@@ -460,23 +693,140 @@ export default async function handler(
           );
 
 
-        if (!existingDuplicate) {
-          throw error;
+        /*
+        Se não encontrou pela URL,
+        procura pelo nome.
+        */
+
+        if (!duplicateWebhook) {
+
+          duplicateWebhook =
+            refreshedList.find(
+              (item) =>
+                String(
+                  item?.name || ""
+                )
+                  .trim()
+                  .toLowerCase()
+                  .includes(
+                    "agente ia integral"
+                  )
+            );
         }
 
 
+        /*
+        Se houver apenas um,
+        utiliza esse.
+        */
+
+        if (
+          !duplicateWebhook &&
+          refreshedList.length === 1
+        ) {
+
+          duplicateWebhook =
+            refreshedList[0];
+        }
+
+
+        /*
+        Se ainda assim não encontrou,
+        NÃO tenta criar novamente.
+
+        Retorna diagnóstico completo.
+        */
+
+        if (!duplicateWebhook) {
+
+          return json(
+            res,
+            409,
+            {
+              ok: false,
+
+              error:
+                "A URL do webhook já existe no Chatwoot, mas o webhook correspondente não apareceu na listagem da API.",
+
+              expected_webhook_url:
+                webhookUrl,
+
+              webhooks_found:
+                refreshedList.map(
+                  (item) => ({
+                    id:
+                      item?.id,
+
+                    name:
+                      item?.name,
+
+                    url:
+                      item?.url,
+
+                    subscriptions:
+                      item?.subscriptions,
+                  })
+                ),
+
+              instruction:
+                "Envie esta resposta completa para diagnóstico. Não execute /api/setup novamente até corrigirmos o webhook.",
+            }
+          );
+        }
+
+
+        /*
+        Encontrou o webhook depois
+        da segunda listagem.
+
+        Atualiza em vez de criar.
+        */
+
         webhook =
           await updateWebhook(
-            existingDuplicate.id,
+            duplicateWebhook.id,
             webhookUrl
           );
+
+
+        webhookAction =
+          "updated_after_duplicate";
       }
     }
 
 
     /*
     ============================================
-    RESPOSTA FINAL
+    11. CONFIRMA WEBHOOK FINAL
+    ============================================
+    */
+
+    const finalWebhooks =
+      await listWebhooks();
+
+
+    const finalWebhookList =
+      asArray(
+        finalWebhooks
+      );
+
+
+    const confirmedWebhook =
+      finalWebhookList.find(
+        (item) =>
+          normalizeUrl(
+            item?.url
+          ) ===
+          normalizeUrl(
+            webhookUrl
+          )
+      ) ||
+      webhook;
+
+
+    /*
+    ============================================
+    12. RESPOSTA DE SUCESSO
     ============================================
     */
 
@@ -489,58 +839,83 @@ export default async function handler(
         service:
           "Agente IA Integral",
 
-        attributes_created:
-          attrsCreated,
+        version:
+          "1.0.4-retorno-automatico",
+
+        attributes: {
+          existing:
+            existingAttrList.length,
+
+          created:
+            attrsCreated,
+        },
 
         teams:
           teamResults,
 
         webhook: {
+          action:
+            webhookAction,
+
+          match_method:
+            webhookMatchMethod,
+
           id:
-            webhook?.id,
+            confirmedWebhook?.id,
 
           name:
-            webhook?.name,
+            confirmedWebhook?.name,
 
           url:
-            webhook?.url ||
+            confirmedWebhook?.url ||
             webhookUrl,
 
           subscriptions:
+            confirmedWebhook?.subscriptions ||
             webhook?.subscriptions ||
-            [
-              "message_created",
-              "conversation_status_changed",
-            ],
+            [],
         },
 
         diagnostics: {
-          custom_attributes_existing:
-            asArray(
-              existingAttrs
-            ).length,
+          webhook_url_expected:
+            webhookUrl,
 
-          custom_attributes_created:
-            attrsCreated.length,
-
-          teams_count:
-            teamResults.length,
-
-          existing_webhooks_count:
+          webhooks_before:
             allWebhooks.length,
 
-          webhook_action:
-            webhook
-              ? "created_or_updated"
-              : "unknown",
+          webhooks_after:
+            finalWebhookList.length,
+
+          ai_enabled:
+            process.env.AI_ENABLED !==
+            "false",
+
+          openai_configured:
+            Boolean(
+              process.env.OPENAI_API_KEY
+            ),
+
+          chatwoot_configured:
+            Boolean(
+              process.env.CHATWOOT_BASE_URL &&
+              process.env.CHATWOOT_ACCOUNT_ID &&
+              process.env.CHATWOOT_API_TOKEN
+            ),
         },
 
         next:
-          "Resolva uma conversa encaminhada pela IA e depois envie uma nova mensagem do cliente para validar a retomada automática.",
+          "Verifique se subscriptions contém message_created e conversation_status_changed. Depois resolva uma conversa encaminhada e envie uma nova mensagem do cliente para testar a retomada automática.",
       }
     );
 
   } catch (error) {
+
+    /*
+    ============================================
+    ERRO GERAL
+    ============================================
+    */
+
     console.error(
       "Erro no setup do Agente IA Integral:",
       error
@@ -552,6 +927,9 @@ export default async function handler(
       500,
       {
         ok: false,
+
+        service:
+          "Agente IA Integral",
 
         error:
           error?.message ||
