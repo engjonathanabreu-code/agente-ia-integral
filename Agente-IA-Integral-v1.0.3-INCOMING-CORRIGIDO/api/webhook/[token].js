@@ -3,16 +3,22 @@ import {
   handleIncomingMessage,
 } from "../../lib/agent.js";
 
+import {
+  handleAgentPresentation,
+  resetAgentPresentation,
+} from "../../lib/presentation.js";
+
 
 /*
 ============================================
-CONTROLE DE DUPLICIDADE
+DEDUPLICAÇÃO LOCAL DE MENSAGENS
 ============================================
 */
 
 const processedMessages =
   globalThis.__integralProcessedMessages ||
   new Map();
+
 
 globalThis.__integralProcessedMessages =
   processedMessages;
@@ -22,13 +28,23 @@ const MESSAGE_TTL_MS =
   10 * 60 * 1000;
 
 
+/*
+============================================
+LIMPEZA
+============================================
+*/
+
 function cleanupProcessedMessages() {
+
   const now =
     Date.now();
 
 
   for (
-    const [id, timestamp]
+    const [
+      id,
+      timestamp,
+    ]
     of processedMessages.entries()
   ) {
 
@@ -36,6 +52,7 @@ function cleanupProcessedMessages() {
       now - timestamp >
       MESSAGE_TTL_MS
     ) {
+
       processedMessages.delete(
         id
       );
@@ -43,6 +60,12 @@ function cleanupProcessedMessages() {
   }
 }
 
+
+/*
+============================================
+RESERVA MESSAGE ID
+============================================
+*/
 
 function reserveMessage(
   messageId
@@ -57,7 +80,9 @@ function reserveMessage(
 
 
   const key =
-    String(messageId);
+    String(
+      messageId
+    );
 
 
   if (
@@ -69,14 +94,6 @@ function reserveMessage(
   }
 
 
-  /*
-  Reserva imediatamente.
-
-  Dessa forma, uma segunda execução
-  da mesma mensagem encontra o ID
-  antes de chamar a IA.
-  */
-
   processedMessages.set(
     key,
     Date.now()
@@ -86,6 +103,12 @@ function reserveMessage(
   return true;
 }
 
+
+/*
+============================================
+LIBERA MESSAGE ID
+============================================
+*/
 
 function releaseMessage(
   messageId
@@ -97,10 +120,18 @@ function releaseMessage(
 
 
   processedMessages.delete(
-    String(messageId)
+    String(
+      messageId
+    )
   );
 }
 
+
+/*
+============================================
+JSON
+============================================
+*/
 
 function sendJson(
   res,
@@ -126,15 +157,21 @@ function sendJson(
 }
 
 
+/*
+============================================
+HANDLER PRINCIPAL
+============================================
+*/
+
 export default async function handler(
   req,
   res
 ) {
 
   /*
-  ============================================
-  GET
-  ============================================
+  ===========================================
+  HEALTH
+  ===========================================
   */
 
   if (
@@ -154,6 +191,9 @@ export default async function handler(
           process.env.AI_ENABLED !==
           "false",
 
+        presentation:
+          true,
+
         deduplication:
           true,
       }
@@ -162,9 +202,9 @@ export default async function handler(
 
 
   /*
-  ============================================
+  ===========================================
   SOMENTE POST
-  ============================================
+  ===========================================
   */
 
   if (
@@ -183,9 +223,9 @@ export default async function handler(
 
 
   /*
-  ============================================
+  ===========================================
   TOKEN
-  ============================================
+  ===========================================
   */
 
   const expectedToken =
@@ -217,9 +257,9 @@ export default async function handler(
 
 
   /*
-  ============================================
-  IA ATIVADA?
-  ============================================
+  ===========================================
+  IA ATIVA?
+  ===========================================
   */
 
   if (
@@ -233,8 +273,7 @@ export default async function handler(
       {
         ok: true,
 
-        ignored:
-          true,
+        ignored: true,
 
         reason:
           "ai_disabled",
@@ -244,9 +283,9 @@ export default async function handler(
 
 
   /*
-  ============================================
+  ===========================================
   PAYLOAD
-  ============================================
+  ===========================================
   */
 
   const payload =
@@ -261,8 +300,7 @@ export default async function handler(
       {
         ok: true,
 
-        ignored:
-          true,
+        ignored: true,
 
         reason:
           "empty_payload",
@@ -283,46 +321,51 @@ export default async function handler(
       message_type:
         payload?.message_type,
 
-      private:
-        payload?.private,
-
       conversation_id:
         payload?.conversation?.id ||
-        payload?.conversation?.display_id,
+        (
+          payload?.event
+            ?.startsWith(
+              "conversation_"
+            )
+            ? payload?.id
+            : undefined
+        ),
 
       status:
         payload?.conversation?.status ||
         payload?.status,
 
-      has_content:
-        Boolean(
-          payload?.content
-        ),
+      changed_attributes:
+        payload?.changed_attributes,
     }
   );
 
 
   /*
-  ============================================
-  STATUS DA CONVERSA
-  ============================================
+  ===========================================
+  CONVERSATION UPDATED
+  ===========================================
+
+  Aqui acontece a apresentação
+  humana quando o agente é atribuído.
   */
 
   if (
     payload.event ===
-    "conversation_status_changed"
+    "conversation_updated"
   ) {
 
     try {
 
       const result =
-        await handleConversationStatusChanged(
+        await handleAgentPresentation(
           payload
         );
 
 
       console.log(
-        "Status da conversa processado",
+        "Conversation updated processada",
         result
       );
 
@@ -336,10 +379,11 @@ export default async function handler(
         }
       );
 
+
     } catch (error) {
 
       console.error(
-        "Erro ao processar status da conversa:",
+        "Erro na apresentação do agente:",
         error
       );
 
@@ -348,8 +392,93 @@ export default async function handler(
         res,
         500,
         {
-          ok:
-            false,
+          ok: false,
+
+          error:
+            "Falha ao processar apresentação do agente.",
+
+          detail:
+            process.env.NODE_ENV ===
+            "development"
+              ? error.message
+              : undefined,
+        }
+      );
+    }
+  }
+
+
+  /*
+  ===========================================
+  STATUS ALTERADO
+  ===========================================
+  */
+
+  if (
+    payload.event ===
+    "conversation_status_changed"
+  ) {
+
+    try {
+
+      /*
+      Rearma a IA para retorno futuro.
+      */
+
+      const aiResult =
+        await handleConversationStatusChanged(
+          payload
+        );
+
+
+      /*
+      Também libera apresentação
+      humana para uma futura sessão.
+      */
+
+      const presentationResult =
+        await resetAgentPresentation(
+          payload
+        );
+
+
+      console.log(
+        "Status da conversa processado",
+        {
+          aiResult,
+          presentationResult,
+        }
+      );
+
+
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+
+          ai:
+            aiResult,
+
+          presentation:
+            presentationResult,
+        }
+      );
+
+
+    } catch (error) {
+
+      console.error(
+        "Erro ao processar status:",
+        error
+      );
+
+
+      return sendJson(
+        res,
+        500,
+        {
+          ok: false,
 
           error:
             "Falha ao processar status da conversa.",
@@ -366,9 +495,9 @@ export default async function handler(
 
 
   /*
-  ============================================
-  SOMENTE MESSAGE_CREATED
-  ============================================
+  ===========================================
+  SOMENTE MESSAGE CREATED
+  ===========================================
   */
 
   if (
@@ -382,8 +511,7 @@ export default async function handler(
       {
         ok: true,
 
-        ignored:
-          true,
+        ignored: true,
 
         reason:
           "event_not_supported",
@@ -393,49 +521,31 @@ export default async function handler(
 
 
   /*
-  ============================================
-  CONFIRMA QUE VEIO DO CLIENTE
-  ============================================
+  ===========================================
+  SOMENTE MENSAGEM DO CLIENTE
+  ===========================================
   */
 
   const isIncoming =
     payload.message_type ===
       "incoming" ||
+
     payload.message_type ===
       0 ||
+
     payload.message_type ===
       "0";
 
 
   if (!isIncoming) {
 
-    console.log(
-      "Webhook ignorado: message_type não é incoming",
-      {
-        event:
-          payload.event,
-
-        message_id:
-          payload?.id,
-
-        message_type:
-          payload.message_type,
-
-        conversation_id:
-          payload?.conversation?.id,
-      }
-    );
-
-
     return sendJson(
       res,
       200,
       {
-        ok:
-          true,
+        ok: true,
 
-        ignored:
-          true,
+        ignored: true,
 
         reason:
           "not_incoming",
@@ -445,9 +555,9 @@ export default async function handler(
 
 
   /*
-  ============================================
-  NOTA PRIVADA
-  ============================================
+  ===========================================
+  IGNORA NOTA PRIVADA
+  ===========================================
   */
 
   if (
@@ -458,11 +568,9 @@ export default async function handler(
       res,
       200,
       {
-        ok:
-          true,
+        ok: true,
 
-        ignored:
-          true,
+        ignored: true,
 
         reason:
           "private_message",
@@ -472,9 +580,9 @@ export default async function handler(
 
 
   /*
-  ============================================
-  DEDUPLICAÇÃO PELO MESSAGE.ID
-  ============================================
+  ===========================================
+  DEDUPLICAÇÃO
+  ===========================================
   */
 
   const messageId =
@@ -507,11 +615,9 @@ export default async function handler(
         res,
         200,
         {
-          ok:
-            true,
+          ok: true,
 
-          ignored:
-            true,
+          ignored: true,
 
           reason:
             "duplicate_message",
@@ -525,9 +631,9 @@ export default async function handler(
 
 
   /*
-  ============================================
-  EXECUTA O AGENTE
-  ============================================
+  ===========================================
+  PROCESSA IA
+  ===========================================
   */
 
   try {
@@ -544,9 +650,6 @@ export default async function handler(
         message_id:
           messageId,
 
-        conversation_id:
-          payload?.conversation?.id,
-
         result,
       }
     );
@@ -556,8 +659,7 @@ export default async function handler(
       res,
       200,
       {
-        ok:
-          true,
+        ok: true,
 
         result,
 
@@ -566,15 +668,8 @@ export default async function handler(
       }
     );
 
+
   } catch (error) {
-
-    /*
-    Libera o ID somente se o processamento
-    realmente falhar.
-
-    Assim uma nova tentativa do Chatwoot
-    pode executar novamente.
-    */
 
     releaseMessage(
       messageId
@@ -591,8 +686,7 @@ export default async function handler(
       res,
       500,
       {
-        ok:
-          false,
+        ok: false,
 
         error:
           "Falha ao processar atendimento.",
