@@ -3,56 +3,208 @@ import {
   handleIncomingMessage,
 } from "../../lib/agent.js";
 
-function sendJson(res, status, data) {
-  res.statusCode = status;
+
+/*
+============================================
+CONTROLE DE DUPLICIDADE
+============================================
+*/
+
+const processedMessages =
+  globalThis.__integralProcessedMessages ||
+  new Map();
+
+globalThis.__integralProcessedMessages =
+  processedMessages;
+
+
+const MESSAGE_TTL_MS =
+  10 * 60 * 1000;
+
+
+function cleanupProcessedMessages() {
+  const now =
+    Date.now();
+
+
+  for (
+    const [id, timestamp]
+    of processedMessages.entries()
+  ) {
+
+    if (
+      now - timestamp >
+      MESSAGE_TTL_MS
+    ) {
+      processedMessages.delete(
+        id
+      );
+    }
+  }
+}
+
+
+function reserveMessage(
+  messageId
+) {
+
+  if (!messageId) {
+    return true;
+  }
+
+
+  cleanupProcessedMessages();
+
+
+  const key =
+    String(messageId);
+
+
+  if (
+    processedMessages.has(
+      key
+    )
+  ) {
+    return false;
+  }
+
+
+  /*
+  Reserva imediatamente.
+
+  Dessa forma, uma segunda execução
+  da mesma mensagem encontra o ID
+  antes de chamar a IA.
+  */
+
+  processedMessages.set(
+    key,
+    Date.now()
+  );
+
+
+  return true;
+}
+
+
+function releaseMessage(
+  messageId
+) {
+
+  if (!messageId) {
+    return;
+  }
+
+
+  processedMessages.delete(
+    String(messageId)
+  );
+}
+
+
+function sendJson(
+  res,
+  status,
+  data
+) {
+
+  res.statusCode =
+    status;
+
 
   res.setHeader(
     "Content-Type",
     "application/json; charset=utf-8"
   );
 
+
   res.end(
-    JSON.stringify(data)
+    JSON.stringify(
+      data
+    )
   );
 }
+
 
 export default async function handler(
   req,
   res
 ) {
 
-  if (req.method === "GET") {
-    return sendJson(res, 200, {
-      ok: true,
-      service: "Agente IA Integral",
-      enabled:
-        process.env.AI_ENABLED !== "false",
-    });
-  }
+  /*
+  ============================================
+  GET
+  ============================================
+  */
 
+  if (
+    req.method === "GET"
+  ) {
 
-  if (req.method !== "POST") {
     return sendJson(
       res,
-      405,
+      200,
       {
-        error: "Method not allowed",
+        ok: true,
+
+        service:
+          "Agente IA Integral",
+
+        enabled:
+          process.env.AI_ENABLED !==
+          "false",
+
+        deduplication:
+          true,
       }
     );
   }
 
 
+  /*
+  ============================================
+  SOMENTE POST
+  ============================================
+  */
+
+  if (
+    req.method !== "POST"
+  ) {
+
+    return sendJson(
+      res,
+      405,
+      {
+        error:
+          "Method not allowed",
+      }
+    );
+  }
+
+
+  /*
+  ============================================
+  TOKEN
+  ============================================
+  */
+
   const expectedToken =
     process.env.WEBHOOK_TOKEN;
 
+
   const receivedToken =
-    req.query?.token;
+    String(
+      req.query?.token ||
+      ""
+    );
 
 
   if (
     !expectedToken ||
-    receivedToken !== expectedToken
+    receivedToken !==
+      expectedToken
   ) {
+
     return sendJson(
       res,
       401,
@@ -64,28 +216,69 @@ export default async function handler(
   }
 
 
+  /*
+  ============================================
+  IA ATIVADA?
+  ============================================
+  */
+
   if (
-    process.env.AI_ENABLED === "false"
+    process.env.AI_ENABLED ===
+    "false"
   ) {
+
     return sendJson(
       res,
       200,
       {
         ok: true,
-        ignored: true,
-        reason: "ai_disabled",
+
+        ignored:
+          true,
+
+        reason:
+          "ai_disabled",
       }
     );
   }
 
 
-  const payload = req.body;
+  /*
+  ============================================
+  PAYLOAD
+  ============================================
+  */
+
+  const payload =
+    req.body;
+
+
+  if (!payload) {
+
+    return sendJson(
+      res,
+      200,
+      {
+        ok: true,
+
+        ignored:
+          true,
+
+        reason:
+          "empty_payload",
+      }
+    );
+  }
 
 
   console.log(
     "Webhook Chatwoot recebido",
     {
-      event: payload?.event,
+      event:
+        payload?.event,
+
+      message_id:
+        payload?.id,
 
       message_type:
         payload?.message_type,
@@ -95,30 +288,25 @@ export default async function handler(
 
       conversation_id:
         payload?.conversation?.id ||
-        payload?.id,
+        payload?.conversation?.display_id,
 
       status:
         payload?.conversation?.status ||
         payload?.status,
 
       has_content:
-        Boolean(payload?.content),
+        Boolean(
+          payload?.content
+        ),
     }
   );
 
 
-  if (!payload) {
-    return sendJson(
-      res,
-      200,
-      {
-        ok: true,
-        ignored: true,
-        reason: "empty_payload",
-      }
-    );
-  }
-
+  /*
+  ============================================
+  STATUS DA CONVERSA
+  ============================================
+  */
 
   if (
     payload.event ===
@@ -132,10 +320,12 @@ export default async function handler(
           payload
         );
 
+
       console.log(
         "Status da conversa processado",
         result
       );
+
 
       return sendJson(
         res,
@@ -153,11 +343,13 @@ export default async function handler(
         error
       );
 
+
       return sendJson(
         res,
         500,
         {
-          ok: false,
+          ok:
+            false,
 
           error:
             "Falha ao processar status da conversa.",
@@ -173,16 +365,26 @@ export default async function handler(
   }
 
 
+  /*
+  ============================================
+  SOMENTE MESSAGE_CREATED
+  ============================================
+  */
+
   if (
     payload.event !==
     "message_created"
   ) {
+
     return sendJson(
       res,
       200,
       {
         ok: true,
-        ignored: true,
+
+        ignored:
+          true,
+
         reason:
           "event_not_supported",
       }
@@ -190,11 +392,19 @@ export default async function handler(
   }
 
 
+  /*
+  ============================================
+  CONFIRMA QUE VEIO DO CLIENTE
+  ============================================
+  */
+
   const isIncoming =
     payload.message_type ===
       "incoming" ||
-    payload.message_type === 0 ||
-    payload.message_type === "0";
+    payload.message_type ===
+      0 ||
+    payload.message_type ===
+      "0";
 
 
   if (!isIncoming) {
@@ -202,7 +412,11 @@ export default async function handler(
     console.log(
       "Webhook ignorado: message_type não é incoming",
       {
-        event: payload.event,
+        event:
+          payload.event,
+
+        message_id:
+          payload?.id,
 
         message_type:
           payload.message_type,
@@ -212,33 +426,109 @@ export default async function handler(
       }
     );
 
+
     return sendJson(
       res,
       200,
       {
-        ok: true,
-        ignored: true,
-        reason: "not_incoming",
+        ok:
+          true,
+
+        ignored:
+          true,
+
+        reason:
+          "not_incoming",
       }
     );
   }
 
 
+  /*
+  ============================================
+  NOTA PRIVADA
+  ============================================
+  */
+
   if (
     payload.private === true
   ) {
+
     return sendJson(
       res,
       200,
       {
-        ok: true,
-        ignored: true,
+        ok:
+          true,
+
+        ignored:
+          true,
+
         reason:
           "private_message",
       }
     );
   }
 
+
+  /*
+  ============================================
+  DEDUPLICAÇÃO PELO MESSAGE.ID
+  ============================================
+  */
+
+  const messageId =
+    payload?.id;
+
+
+  if (messageId) {
+
+    const reserved =
+      reserveMessage(
+        messageId
+      );
+
+
+    if (!reserved) {
+
+      console.log(
+        "Mensagem duplicada ignorada",
+        {
+          message_id:
+            messageId,
+
+          conversation_id:
+            payload?.conversation?.id,
+        }
+      );
+
+
+      return sendJson(
+        res,
+        200,
+        {
+          ok:
+            true,
+
+          ignored:
+            true,
+
+          reason:
+            "duplicate_message",
+
+          message_id:
+            messageId,
+        }
+      );
+    }
+  }
+
+
+  /*
+  ============================================
+  EXECUTA O AGENTE
+  ============================================
+  */
 
   try {
 
@@ -247,32 +537,62 @@ export default async function handler(
         payload
       );
 
+
     console.log(
       "Agente IA processou mensagem",
-      result
+      {
+        message_id:
+          messageId,
+
+        conversation_id:
+          payload?.conversation?.id,
+
+        result,
+      }
     );
+
 
     return sendJson(
       res,
       200,
       {
-        ok: true,
+        ok:
+          true,
+
         result,
+
+        message_id:
+          messageId,
       }
     );
 
   } catch (error) {
+
+    /*
+    Libera o ID somente se o processamento
+    realmente falhar.
+
+    Assim uma nova tentativa do Chatwoot
+    pode executar novamente.
+    */
+
+    releaseMessage(
+      messageId
+    );
+
 
     console.error(
       "Erro no Agente IA Integral:",
       error
     );
 
+
     return sendJson(
       res,
       500,
       {
-        ok: false,
+        ok:
+          false,
 
         error:
           "Falha ao processar atendimento.",
