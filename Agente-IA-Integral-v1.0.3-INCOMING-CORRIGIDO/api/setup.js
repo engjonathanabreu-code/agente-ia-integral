@@ -10,85 +10,61 @@ import {
 
 
 const attributes = [
-
   {
     key: "ia_etapa",
-
     name: "IA — Etapa",
-
     description:
       "Etapa atual do atendimento inicial da IA.",
   },
-
   {
     key: "ia_nome",
-
     name: "IA — Nome completo",
-
     description:
       "Nome informado pelo cliente durante a triagem.",
   },
-
   {
     key: "ia_cidade",
-
     name: "IA — Cidade",
-
     description:
       "Cidade informada pelo cliente durante a triagem.",
   },
-
   {
     key: "ia_setor",
-
     name: "IA — Setor",
-
     description:
       "Setor classificado pelo agente de IA.",
   },
-
   {
-    key:
-      "ia_atendimento_concluido",
-
-    name:
-      "IA — Triagem concluída",
-
+    key: "ia_atendimento_concluido",
+    name: "IA — Triagem concluída",
     description:
       "Indica se o atendimento inicial já foi encaminhado.",
-
     type: 7,
   },
 ];
 
 
 const teams = [
-
   [
     "Atendimento",
     "Atendimento geral e triagem humana.",
   ],
-
   [
     "Comercial",
     "Novos serviços, propostas e oportunidades comerciais.",
   ],
-
   [
     "Financeiro",
     "Pagamentos, boletos, parcelas e assuntos financeiros.",
   ],
-
   [
     "Projetos",
     "Elaboração e dúvidas relacionadas a projetos técnicos.",
   ],
-
   [
     "Topografia",
     "Levantamentos, medições e atividades de campo.",
   ],
-
   [
     "Pós-Protocolo",
     "Andamentos após protocolo, prefeitura, cartório e registro.",
@@ -96,14 +72,8 @@ const teams = [
 ];
 
 
-function json(
-  res,
-  status,
-  body
-) {
-
-  res.statusCode =
-    status;
+function json(res, status, body) {
+  res.statusCode = status;
 
   res.setHeader(
     "Content-Type",
@@ -121,32 +91,23 @@ function json(
 
 
 function asArray(value) {
-
   if (Array.isArray(value)) {
     return value;
   }
 
-  if (
-    Array.isArray(value?.payload)
-  ) {
+  if (Array.isArray(value?.payload)) {
     return value.payload;
   }
 
-  if (
-    Array.isArray(value?.data)
-  ) {
+  if (Array.isArray(value?.data)) {
     return value.data;
   }
 
-  if (
-    Array.isArray(value?.webhooks)
-  ) {
+  if (Array.isArray(value?.webhooks)) {
     return value.webhooks;
   }
 
-  if (
-    Array.isArray(value?.teams)
-  ) {
+  if (Array.isArray(value?.teams)) {
     return value.teams;
   }
 
@@ -155,11 +116,17 @@ function asArray(value) {
       value?.custom_attribute_definitions
     )
   ) {
-    return value
-      .custom_attribute_definitions;
+    return value.custom_attribute_definitions;
   }
 
   return [];
+}
+
+
+function normalizeUrl(url) {
+  return String(url || "")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 
@@ -167,17 +134,12 @@ export default async function handler(
   req,
   res
 ) {
-
-  if (
-    req.method !== "POST"
-  ) {
-
+  if (req.method !== "POST") {
     return json(
       res,
       405,
       {
-        error:
-          "Method not allowed",
+        error: "Method not allowed",
       }
     );
   }
@@ -193,22 +155,21 @@ export default async function handler(
     auth !==
       `Bearer ${process.env.SETUP_SECRET}`
   ) {
-
     return json(
       res,
       401,
       {
-        error:
-          "Setup não autorizado.",
+        error: "Setup não autorizado.",
       }
     );
   }
 
 
   try {
-
     /*
-    ATRIBUTOS
+    ============================================
+    ATRIBUTOS PERSONALIZADOS
+    ============================================
     */
 
     const existingAttrs =
@@ -217,9 +178,7 @@ export default async function handler(
 
     const existingKeys =
       new Set(
-        asArray(
-          existingAttrs
-        ).map(
+        asArray(existingAttrs).map(
           (item) =>
             item.attribute_key
         )
@@ -233,13 +192,11 @@ export default async function handler(
       const definition
       of attributes
     ) {
-
       if (
         !existingKeys.has(
           definition.key
         )
       ) {
-
         const created =
           await createConversationAttribute(
             definition
@@ -257,22 +214,26 @@ export default async function handler(
 
 
     /*
+    ============================================
     EQUIPES
+    ============================================
     */
 
     const currentTeams =
       await listTeams();
 
 
-    const normalized =
+    const normalizedTeams =
       new Map(
         asArray(
           currentTeams
         ).map(
           (team) => [
             String(
-              team.name
-            ).toLowerCase(),
+              team.name || ""
+            )
+              .trim()
+              .toLowerCase(),
 
             team,
           ]
@@ -289,15 +250,13 @@ export default async function handler(
         description,
       ] of teams
     ) {
-
       let team =
-        normalized.get(
+        normalizedTeams.get(
           name.toLowerCase()
         );
 
 
       if (!team) {
-
         team =
           await createTeam(
             name,
@@ -307,14 +266,20 @@ export default async function handler(
 
 
       teamResults.push({
-        id: team.id,
-        name: team.name,
+        id:
+          team?.id,
+
+        name:
+          team?.name ||
+          name,
       });
     }
 
 
     /*
-    WEBHOOK
+    ============================================
+    CONFIGURAÇÃO DO WEBHOOK
+    ============================================
     */
 
     const appUrl =
@@ -335,7 +300,6 @@ export default async function handler(
       !appUrl ||
       !webhookToken
     ) {
-
       throw new Error(
         "APP_URL e WEBHOOK_TOKEN são obrigatórios para o setup."
       );
@@ -348,70 +312,182 @@ export default async function handler(
       )}`;
 
 
+    /*
+    Busca todos os webhooks atuais
+    */
+
     const existingWebhooks =
       await listWebhooks();
 
 
-    let webhook =
+    const allWebhooks =
       asArray(
         existingWebhooks
-      ).find(
-        (item) =>
-          item.url ===
-          webhookUrl
       );
 
 
     /*
-    SE NÃO EXISTIR,
-    CRIA.
+    Primeiro tenta localizar exatamente
+    pela URL, ignorando barra final.
+    */
+
+    let webhook =
+      allWebhooks.find(
+        (item) =>
+          normalizeUrl(item?.url) ===
+          normalizeUrl(webhookUrl)
+      );
+
+
+    /*
+    Caso não encontre pela URL,
+    tenta localizar pelo nome do agente.
+    Isso evita criar webhook duplicado.
     */
 
     if (!webhook) {
-
       webhook =
-        await createWebhook(
+        allWebhooks.find(
+          (item) =>
+            String(
+              item?.name || ""
+            )
+              .trim()
+              .toLowerCase()
+              .includes(
+                "agente ia integral"
+              )
+        );
+    }
+
+
+    /*
+    Caso ainda não tenha encontrado,
+    tenta localizar qualquer webhook
+    apontando para /api/webhook/
+    do mesmo APP_URL.
+    */
+
+    if (!webhook) {
+      webhook =
+        allWebhooks.find(
+          (item) => {
+            const url =
+              normalizeUrl(
+                item?.url
+              );
+
+            return (
+              url.startsWith(
+                normalizeUrl(appUrl)
+              ) &&
+              url.includes(
+                "/api/webhook/"
+              )
+            );
+          }
+        );
+    }
+
+
+    /*
+    ============================================
+    SE O WEBHOOK JÁ EXISTE:
+    ATUALIZA URL E SUBSCRIPTIONS
+    ============================================
+    */
+
+    if (webhook) {
+      webhook =
+        await updateWebhook(
+          webhook.id,
           webhookUrl
         );
-
     } else {
-
       /*
-      SE JÁ EXISTIR,
-      CONFERE AS ASSINATURAS.
+      ============================================
+      SÓ CRIA SE NÃO EXISTIR
+      ============================================
       */
 
-      const subscriptions =
-        new Set(
-          webhook.subscriptions ||
-          []
-        );
+      try {
+        webhook =
+          await createWebhook(
+            webhookUrl
+          );
+      } catch (error) {
+        /*
+        Fallback para o caso de o Chatwoot
+        responder 422 "Url has already been taken".
+
+        Nesse caso, lista novamente os webhooks
+        e tenta localizar a URL existente.
+        */
+
+        const isDuplicateUrl =
+          error?.status === 422 ||
+          String(
+            error?.message || ""
+          ).includes(
+            "Url has already been taken"
+          );
 
 
-      if (
-        !subscriptions.has(
-          "message_created"
-        ) ||
-        !subscriptions.has(
-          "conversation_status_changed"
-        )
-      ) {
+        if (!isDuplicateUrl) {
+          throw error;
+        }
+
+
+        const refreshedWebhooks =
+          await listWebhooks();
+
+
+        const refreshedList =
+          asArray(
+            refreshedWebhooks
+          );
+
+
+        const existingDuplicate =
+          refreshedList.find(
+            (item) =>
+              normalizeUrl(
+                item?.url
+              ) ===
+              normalizeUrl(
+                webhookUrl
+              )
+          );
+
+
+        if (!existingDuplicate) {
+          throw error;
+        }
+
 
         webhook =
           await updateWebhook(
-            webhook.id,
+            existingDuplicate.id,
             webhookUrl
           );
       }
     }
 
 
+    /*
+    ============================================
+    RESPOSTA FINAL
+    ============================================
+    */
+
     return json(
       res,
       200,
       {
-
         ok: true,
+
+        service:
+          "Agente IA Integral",
 
         attributes_created:
           attrsCreated,
@@ -420,50 +496,72 @@ export default async function handler(
           teamResults,
 
         webhook: {
-
           id:
-            webhook.id,
+            webhook?.id,
+
+          name:
+            webhook?.name,
 
           url:
-            webhook.url,
+            webhook?.url ||
+            webhookUrl,
 
           subscriptions:
-            webhook.subscriptions,
+            webhook?.subscriptions ||
+            [
+              "message_created",
+              "conversation_status_changed",
+            ],
         },
 
         diagnostics: {
-
-          custom_attributes_count:
+          custom_attributes_existing:
             asArray(
               existingAttrs
-            ).length +
+            ).length,
+
+          custom_attributes_created:
             attrsCreated.length,
 
           teams_count:
             teamResults.length,
 
           existing_webhooks_count:
-            asArray(
-              existingWebhooks
-            ).length,
+            allWebhooks.length,
+
+          webhook_action:
+            webhook
+              ? "created_or_updated"
+              : "unknown",
         },
 
         next:
-          "Resolva uma conversa já encaminhada e depois envie uma nova mensagem do cliente para testar a retomada automática.",
+          "Resolva uma conversa encaminhada pela IA e depois envie uma nova mensagem do cliente para validar a retomada automática.",
       }
     );
 
   } catch (error) {
+    console.error(
+      "Erro no setup do Agente IA Integral:",
+      error
+    );
 
-    console.error(error);
 
     return json(
       res,
       500,
       {
         ok: false,
+
         error:
-          error.message,
+          error?.message ||
+          "Erro desconhecido durante o setup.",
+
+        status:
+          error?.status,
+
+        detail:
+          error?.data,
       }
     );
   }
