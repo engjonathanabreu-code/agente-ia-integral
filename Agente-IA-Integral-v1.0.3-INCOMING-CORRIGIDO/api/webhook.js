@@ -3,7 +3,110 @@ import {
   handleIncomingMessage,
 } from "../lib/agent.js";
 
-function sendJson(res, status, data) {
+
+/*
+============================================
+CONTROLE DE DUPLICIDADE
+============================================
+
+Guarda IDs de mensagens processadas recentemente.
+
+Em ambiente serverless isso funciona como
+proteção local da instância e evita grande
+parte dos reenvios imediatos do Chatwoot.
+*/
+
+const processedMessages =
+  globalThis.__integralProcessedMessages ||
+  new Map();
+
+globalThis.__integralProcessedMessages =
+  processedMessages;
+
+
+const MESSAGE_TTL_MS =
+  10 * 60 * 1000;
+
+
+/*
+Remove IDs antigos para não deixar
+a memória crescer indefinidamente.
+*/
+
+function cleanupProcessedMessages() {
+  const now = Date.now();
+
+  for (
+    const [id, timestamp]
+    of processedMessages.entries()
+  ) {
+    if (
+      now - timestamp >
+      MESSAGE_TTL_MS
+    ) {
+      processedMessages.delete(id);
+    }
+  }
+}
+
+
+/*
+Tenta reservar uma mensagem.
+
+Retorna:
+true  = pode processar
+false = já foi recebida/processada
+*/
+
+function reserveMessage(messageId) {
+  if (!messageId) {
+    return true;
+  }
+
+  cleanupProcessedMessages();
+
+  const key =
+    String(messageId);
+
+  if (
+    processedMessages.has(key)
+  ) {
+    return false;
+  }
+
+  /*
+  Reserva ANTES de chamar a IA.
+
+  Isso é importante porque impede
+  duas chamadas quase simultâneas
+  dentro da mesma instância.
+  */
+
+  processedMessages.set(
+    key,
+    Date.now()
+  );
+
+  return true;
+}
+
+
+function releaseMessage(messageId) {
+  if (!messageId) {
+    return;
+  }
+
+  processedMessages.delete(
+    String(messageId)
+  );
+}
+
+
+function sendJson(
+  res,
+  status,
+  data
+) {
   res.statusCode = status;
 
   res.setHeader(
@@ -16,18 +119,33 @@ function sendJson(res, status, data) {
   );
 }
 
+
 export default async function handler(
   req,
   res
 ) {
 
+  /*
+  ============================================
+  GET / HEALTH
+  ============================================
+  */
+
   if (req.method === "GET") {
-    return sendJson(res, 200, {
-      ok: true,
-      service: "Agente IA Integral",
-      enabled:
-        process.env.AI_ENABLED !== "false",
-    });
+    return sendJson(
+      res,
+      200,
+      {
+        ok: true,
+        service:
+          "Agente IA Integral",
+        enabled:
+          process.env.AI_ENABLED !==
+          "false",
+        deduplication:
+          true,
+      }
+    );
   }
 
 
@@ -36,22 +154,33 @@ export default async function handler(
       res,
       405,
       {
-        error: "Method not allowed",
+        error:
+          "Method not allowed",
       }
     );
   }
 
 
+  /*
+  ============================================
+  SEGURANÇA
+  ============================================
+  */
+
   const expectedToken =
     process.env.WEBHOOK_TOKEN;
 
   const receivedToken =
-    req.query?.token;
+    String(
+      req.query?.token ||
+      ""
+    );
 
 
   if (
     !expectedToken ||
-    receivedToken !== expectedToken
+    receivedToken !==
+      expectedToken
   ) {
     return sendJson(
       res,
@@ -65,7 +194,8 @@ export default async function handler(
 
 
   if (
-    process.env.AI_ENABLED === "false"
+    process.env.AI_ENABLED ===
+    "false"
   ) {
     return sendJson(
       res,
@@ -73,38 +203,15 @@ export default async function handler(
       {
         ok: true,
         ignored: true,
-        reason: "ai_disabled",
+        reason:
+          "ai_disabled",
       }
     );
   }
 
 
-  const payload = req.body;
-
-
-  console.log(
-    "Webhook Chatwoot recebido",
-    {
-      event: payload?.event,
-
-      message_type:
-        payload?.message_type,
-
-      private:
-        payload?.private,
-
-      conversation_id:
-        payload?.conversation?.id ||
-        payload?.id,
-
-      status:
-        payload?.conversation?.status ||
-        payload?.status,
-
-      has_content:
-        Boolean(payload?.content),
-    }
-  );
+  const payload =
+    req.body;
 
 
   if (!payload) {
@@ -114,14 +221,49 @@ export default async function handler(
       {
         ok: true,
         ignored: true,
-        reason: "empty_payload",
+        reason:
+          "empty_payload",
       }
     );
   }
 
 
+  console.log(
+    "Webhook Chatwoot recebido",
+    {
+      event:
+        payload?.event,
+
+      message_id:
+        payload?.id,
+
+      message_type:
+        payload?.message_type,
+
+      private:
+        payload?.private,
+
+      conversation_id:
+        payload?.conversation?.id ||
+        payload?.conversation?.display_id ||
+        payload?.id,
+
+      status:
+        payload?.conversation?.status ||
+        payload?.status,
+
+      has_content:
+        Boolean(
+          payload?.content
+        ),
+    }
+  );
+
+
   /*
-  MUDANÇA DE STATUS
+  ============================================
+  STATUS DA CONVERSA
+  ============================================
   */
 
   if (
@@ -136,10 +278,12 @@ export default async function handler(
           payload
         );
 
+
       console.log(
         "Status da conversa processado",
         result
       );
+
 
       return sendJson(
         res,
@@ -156,6 +300,7 @@ export default async function handler(
         "Erro ao processar status da conversa:",
         error
       );
+
 
       return sendJson(
         res,
@@ -178,7 +323,9 @@ export default async function handler(
 
 
   /*
-  OUTROS EVENTOS
+  ============================================
+  SOMENTE MESSAGE_CREATED
+  ============================================
   */
 
   if (
@@ -199,31 +346,35 @@ export default async function handler(
 
 
   /*
-  GARANTE QUE A MENSAGEM
-  VEIO DO CLIENTE
+  ============================================
+  SOMENTE MENSAGEM DO CLIENTE
+  ============================================
   */
 
   const isIncoming =
     payload.message_type ===
       "incoming" ||
     payload.message_type === 0 ||
-    payload.message_type === "0";
+    payload.message_type ===
+      "0";
 
 
   if (!isIncoming) {
 
     console.log(
-      "Webhook ignorado: message_type não é incoming",
+      "Webhook ignorado: mensagem não é incoming",
       {
-        event: payload.event,
+        message_id:
+          payload?.id,
 
         message_type:
-          payload.message_type,
+          payload?.message_type,
 
         conversation_id:
           payload?.conversation?.id,
       }
     );
+
 
     return sendJson(
       res,
@@ -231,14 +382,17 @@ export default async function handler(
       {
         ok: true,
         ignored: true,
-        reason: "not_incoming",
+        reason:
+          "not_incoming",
       }
     );
   }
 
 
   /*
-  NÃO PROCESSAR NOTA PRIVADA
+  ============================================
+  IGNORA NOTAS PRIVADAS
+  ============================================
   */
 
   if (
@@ -257,6 +411,63 @@ export default async function handler(
   }
 
 
+  /*
+  ============================================
+  DEDUPLICAÇÃO
+  ============================================
+  */
+
+  const messageId =
+    payload?.id;
+
+
+  if (messageId) {
+
+    const reserved =
+      reserveMessage(
+        messageId
+      );
+
+
+    if (!reserved) {
+
+      console.log(
+        "Mensagem duplicada ignorada",
+        {
+          message_id:
+            messageId,
+
+          conversation_id:
+            payload?.conversation?.id,
+        }
+      );
+
+
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+
+          ignored: true,
+
+          reason:
+            "duplicate_message",
+
+          message_id:
+            messageId,
+        }
+      );
+    }
+  }
+
+
+  /*
+  ============================================
+  PROCESSAMENTO DA IA
+  ============================================
+  */
+
   try {
 
     const result =
@@ -264,10 +475,17 @@ export default async function handler(
         payload
       );
 
+
     console.log(
       "Agente IA processou mensagem",
-      result
+      {
+        message_id:
+          messageId,
+
+        result,
+      }
     );
+
 
     return sendJson(
       res,
@@ -275,15 +493,29 @@ export default async function handler(
       {
         ok: true,
         result,
+        message_id:
+          messageId,
       }
     );
 
   } catch (error) {
 
+    /*
+    Se deu erro real, removemos a reserva
+    para permitir que uma tentativa futura
+    processe novamente a mensagem.
+    */
+
+    releaseMessage(
+      messageId
+    );
+
+
     console.error(
       "Erro no Agente IA Integral:",
       error
     );
+
 
     return sendJson(
       res,
