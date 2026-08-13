@@ -104,35 +104,48 @@ function isAndamentoIntent(message) {
   const terms = [
     "andamento",
     "andamentos",
+
     "status do processo",
     "status processo",
+
     "como esta meu processo",
     "como esta o meu processo",
     "como está meu processo",
     "como está o meu processo",
+
     "em que fase",
     "em qual fase",
+
     "qual etapa",
     "etapa do processo",
     "fase do processo",
+
     "situacao do processo",
     "situação do processo",
+
     "previsao",
     "previsão",
+
     "quando fica pronto",
     "quando vai ficar pronto",
     "quando termina",
     "quando vai terminar",
+
     "ja foi protocolado",
     "já foi protocolado",
     "foi protocolado",
+
     "protocolo do processo",
     "protocolo",
+
     "prefeitura analisou",
+
     "cartorio analisou",
     "cartório analisou",
+
     "registro de imoveis",
     "registro de imóveis",
+
     "crf",
   ];
 
@@ -165,9 +178,11 @@ async function getClientProgress(
 
 
   if (!secret) {
+
     console.error(
       "CRM_AGENT_READ_SECRET não configurado no Agente IA."
     );
+
 
     return {
       ok: false,
@@ -178,6 +193,7 @@ async function getClientProgress(
 
 
   try {
+
     const response =
       await fetch(
         `${baseUrl}/api/andamento-cliente`,
@@ -211,14 +227,17 @@ async function getClientProgress(
 
 
     try {
+
       data =
         text
           ? JSON.parse(text)
           : null;
 
     } catch {
+
       data = {
         ok: false,
+
         error:
           "Resposta inválida do CRM.",
       };
@@ -241,6 +260,7 @@ async function getClientProgress(
 
       return {
         ok: false,
+
         code:
           "CRM_REQUEST_ERROR",
 
@@ -280,6 +300,7 @@ async function getClientProgress(
 
     return {
       ok: false,
+
       code:
         "CRM_CONNECTION_ERROR",
     };
@@ -427,7 +448,7 @@ async function tryAnswerProgress(
 
   /*
   CRM indisponível:
-  não bloqueia o atendimento.
+  mantém fluxo normal.
   */
 
   if (
@@ -439,6 +460,7 @@ async function tryAnswerProgress(
       "Consulta de andamento indisponível. Fluxo normal será mantido.",
       {
         conversationId,
+
         code:
           result?.code ||
           null,
@@ -451,8 +473,7 @@ async function tryAnswerProgress(
 
 
   /*
-  Cliente não encontrado.
-  Continua para humano.
+  Cliente não localizado.
   */
 
   if (
@@ -464,8 +485,8 @@ async function tryAnswerProgress(
 
 
   /*
-  Cliente encontrado,
-  mas sem Projeto/NUI.
+  Cliente existe,
+  mas não possui Projeto/NUI.
   */
 
   if (
@@ -498,8 +519,9 @@ Vou encaminhar seu atendimento para a equipe verificar essa vinculação e consu
 
 
   /*
-  Cliente possui projeto,
-  mas não há andamento liberado.
+  Projeto existe,
+  mas nenhum andamento foi liberado
+  para consulta automática.
   */
 
   if (
@@ -533,7 +555,6 @@ Vou encaminhar seu atendimento para a equipe responsável verificar a situação
 
   /*
   Andamento encontrado.
-  Responde diretamente.
   */
 
   const message =
@@ -560,10 +581,6 @@ Vou encaminhar seu atendimento para a equipe responsável verificar a situação
 
       ia_ultima_consulta_andamento:
         new Date().toISOString(),
-
-      ia_etapa:
-        attrs?.ia_etapa ||
-        "setor",
 
       ia_atendimento_concluido:
         false,
@@ -632,20 +649,28 @@ function validFullName(value) {
   const invalidNames = [
     "nao quero",
     "não quero",
+
     "nao sei",
     "não sei",
+
     "prefiro nao",
     "prefiro não",
+
     "quero atendimento",
+
     "quero falar com alguem",
     "quero falar com alguém",
+
     "meu nome",
+
     "nome completo",
+
     "atendimento",
     "financeiro",
     "comercial",
     "projetos",
     "topografia",
+
     "pos protocolo",
     "pós protocolo",
   ];
@@ -678,36 +703,53 @@ function isCityRefusal(value) {
   const invalid = [
     "nao",
     "não",
+
     "nao quero",
     "não quero",
+
     "prefiro nao",
     "prefiro não",
+
     "nao quero informar",
     "não quero informar",
+
     "nao vou informar",
     "não vou informar",
+
     "nao quero dizer",
     "não quero dizer",
+
     "prefiro nao dizer",
     "prefiro não dizer",
+
     "nao sei",
     "não sei",
+
     "nao lembro",
     "não lembro",
+
     "nenhuma",
     "nenhum",
+
     "qualquer",
+
     "tanto faz",
+
     "nao importa",
     "não importa",
+
     "pra que",
     "para que",
+
     "por que",
     "porque",
+
     "nao interessa",
     "não interessa",
+
     "nao te interessa",
     "não te interessa",
+
     "isso e pessoal",
     "isso é pessoal",
   ];
@@ -715,7 +757,9 @@ function isCityRefusal(value) {
 
   return invalid.some(
     (item) =>
-      text === normalizeText(item) ||
+      text ===
+        normalizeText(item) ||
+
       text.startsWith(
         `${normalizeText(item)} `
       )
@@ -752,12 +796,16 @@ function validCity(value) {
     "ok",
     "okay",
     "okk",
+
     "beleza",
     "blz",
+
     "show",
     "entendi",
+
     "obrigado",
     "obrigada",
+
     "valeu",
 
     "atendimento",
@@ -765,11 +813,13 @@ function validCity(value) {
     "financeiro",
     "projetos",
     "topografia",
+
     "pos protocolo",
     "pós protocolo",
 
     "atendente",
     "humano",
+
     "quero ajuda",
     "preciso de ajuda",
 
@@ -777,6 +827,7 @@ function validCity(value) {
     "cidade",
 
     "brasil",
+
     "sc",
     "pr",
     "rs",
@@ -787,11 +838,13 @@ function validCity(value) {
     "agora",
     "depois",
     "hoje",
+
     "amanha",
     "amanhã",
 
     "aqui",
     "ali",
+
     "la",
     "lá",
   ];
@@ -872,31 +925,46 @@ function validContactReason(value) {
   const invalid = [
     "nao sei",
     "não sei",
+
     "nao quero dizer",
     "não quero dizer",
+
     "nao quero falar",
     "não quero falar",
+
     "prefiro nao dizer",
     "prefiro não dizer",
+
     "nada",
+
     "nenhum",
     "nenhuma",
+
     "qualquer coisa",
+
     "tanto faz",
+
     "sei la",
     "sei lá",
+
     "sim",
+
     "nao",
     "não",
+
     "ok",
     "okay",
+
     "beleza",
     "blz",
+
     "bom dia",
     "boa tarde",
     "boa noite",
+
     "teste",
     "testando",
+
     "abc",
     "asdf",
   ];
@@ -1029,6 +1097,7 @@ function directSectorMatch(message) {
     const [sector, terms]
     of patterns
   ) {
+
     if (
       terms.some(
         (term) =>
@@ -1037,6 +1106,7 @@ function directSectorMatch(message) {
           )
       )
     ) {
+
       return sector;
     }
   }
@@ -1047,6 +1117,7 @@ function directSectorMatch(message) {
 
 
   if (numeric) {
+
     return SECTORS[
       Number(numeric) - 1
     ];
@@ -1069,6 +1140,7 @@ async function aiSectorMatch(message) {
 
 
   if (!apiKey) {
+
     throw new Error(
       "OPENAI_API_KEY não configurada."
     );
@@ -1088,7 +1160,8 @@ async function aiSectorMatch(message) {
         "gpt-5",
 
       reasoning: {
-        effort: "low",
+        effort:
+          "low",
       },
 
       instructions: `
@@ -1171,14 +1244,17 @@ async function extractCustomerText(
 
 
   if (text) {
+
     return {
       text,
-      source: "text",
+      source:
+        "text",
     };
   }
 
 
   try {
+
     const transcription =
       await transcriptionFromPayload(
         payload
@@ -1186,6 +1262,7 @@ async function extractCustomerText(
 
 
     if (transcription) {
+
       console.log(
         "Áudio do cliente transcrito",
         {
@@ -1207,6 +1284,7 @@ async function extractCustomerText(
     }
 
   } catch (error) {
+
     console.error(
       "Erro ao transcrever áudio:",
       error
@@ -1216,7 +1294,8 @@ async function extractCustomerText(
 
   return {
     text: "",
-    source: "unknown",
+    source:
+      "unknown",
   };
 }
 
@@ -1262,7 +1341,8 @@ async function findTeamIdForSector(
     );
 
 
-  return found?.id || null;
+  return found?.id ||
+    null;
 }
 
 
@@ -1294,6 +1374,32 @@ Você também pode escrever ou enviar um áudio explicando o que precisa.`;
 
 /*
 ===========================================
+MENU DE RETORNO
+===========================================
+*/
+
+function returnMenuText(name) {
+  const customerName =
+    firstName(name);
+
+
+  return `Olá, ${customerName || "tudo bem"}! Que legal falar com você novamente 😊
+
+Com qual setor você gostaria de falar ou sobre o que deseja conversar?
+
+1. Atendimento
+2. Comercial
+3. Financeiro
+4. Projetos
+5. Topografia
+6. Pós-Protocolo
+
+Você também pode escrever ou enviar um áudio explicando diretamente o que precisa.`;
+}
+
+
+/*
+===========================================
 ENCAMINHAMENTO
 ===========================================
 */
@@ -1315,6 +1421,7 @@ async function handoffToSector(
 
 
   if (teamId) {
+
     try {
 
       await assignConversationToTeam(
@@ -1377,6 +1484,7 @@ A equipe responsável receberá sua solicitação com estas informações:
 “${contactReason}”
 
 Agora é só aguardar a continuidade do atendimento por aqui.`
+
       : `${prefix}obrigado. Já registrei o motivo do seu contato para o setor de ${sector}.
 
 Sua solicitação foi registrada com estas informações:
@@ -1393,9 +1501,13 @@ A equipe responsável dará continuidade por aqui.`;
 
 
   return {
-    stage: "encaminhado",
+    stage:
+      "encaminhado",
+
     sector,
+
     contactReason,
+
     assigned,
   };
 }
@@ -1417,8 +1529,11 @@ export async function handleConversationStatusChanged(
 
 
   if (!conversationId) {
+
     return {
-      ignored: true,
+      ignored:
+        true,
+
       reason:
         "conversation_id_missing",
     };
@@ -1434,10 +1549,14 @@ export async function handleConversationStatusChanged(
 
 
   if (status !== "resolved") {
+
     return {
-      ignored: true,
+      ignored:
+        true,
+
       reason:
         "status_not_resolved",
+
       status,
     };
   }
@@ -1457,13 +1576,17 @@ export async function handleConversationStatusChanged(
   const wasHandedOff =
     attrs.ia_atendimento_concluido ===
       true ||
+
     attrs.ia_etapa ===
       "encaminhado";
 
 
   if (!wasHandedOff) {
+
     return {
-      ignored: true,
+      ignored:
+        true,
+
       reason:
         "not_an_ai_handoff",
     };
@@ -1480,6 +1603,12 @@ export async function handleConversationStatusChanged(
 
       ia_atendimento_concluido:
         false,
+
+      ia_setor:
+        "",
+
+      ia_motivo_contato:
+        "",
     }
   );
 
@@ -1509,6 +1638,7 @@ export async function handleIncomingMessage(
 
 
   if (!conversationId) {
+
     throw new Error(
       "conversation.id não encontrado."
     );
@@ -1534,7 +1664,9 @@ export async function handleIncomingMessage(
 
 
     return {
-      ignored: true,
+      ignored:
+        true,
+
       reason:
         "unreadable_message",
     };
@@ -1557,6 +1689,22 @@ export async function handleIncomingMessage(
     "inicio";
 
 
+  console.log(
+    "Agente IA processando mensagem",
+    {
+      conversationId,
+      stage,
+      name:
+        attrs.ia_nome ||
+        null,
+      city:
+        attrs.ia_cidade ||
+        null,
+      text,
+    }
+  );
+
+
   /*
   ===========================================
   HUMANO JÁ ASSUMIU
@@ -1566,12 +1714,15 @@ export async function handleIncomingMessage(
   if (
     attrs.ia_atendimento_concluido ===
       true ||
+
     stage ===
       "encaminhado"
   ) {
 
     return {
-      ignored: true,
+      ignored:
+        true,
+
       reason:
         "human_handoff_active",
     };
@@ -1580,64 +1731,15 @@ export async function handleIncomingMessage(
 
   /*
   ===========================================
-  CONSULTA AUTOMÁTICA DE ANDAMENTO
-  ===========================================
-
-  Antes de classificar ou encaminhar,
-  verifica se o cliente está perguntando
-  pelo andamento do próprio processo.
-  */
-
-  if (
-    stage !== "nome" &&
-    stage !== "cidade"
-  ) {
-
-    const progressResult =
-      await tryAnswerProgress(
-        conversationId,
-        text,
-        attrs
-      );
-
-
-    if (
-      progressResult?.handled ===
-      true
-    ) {
-
-      return {
-        stage:
-          stage,
-
-        progressAnswered:
-          true,
-      };
-    }
-
-
-    if (
-      progressResult?.forceHandoff ===
-      true
-    ) {
-
-      return handoffToSector(
-        conversationId,
-        attrs,
-        "Atendimento",
-        text
-      );
-    }
-  }
-
-
-  /*
-  ===========================================
-  RETORNO
+  RETORNO DE CONTATO
   ===========================================
   */
 
   if (stage === "retorno") {
+
+    /*
+    Nome ainda não conhecido
+    */
 
     if (!attrs.ia_nome) {
 
@@ -1662,11 +1764,18 @@ export async function handleIncomingMessage(
 
 
       return {
-        stage: "nome",
-        return_flow: true,
+        stage:
+          "nome",
+
+        return_flow:
+          true,
       };
     }
 
+
+    /*
+    Cidade ainda não conhecida
+    */
 
     if (!attrs.ia_cidade) {
 
@@ -1677,6 +1786,9 @@ export async function handleIncomingMessage(
 
           ia_etapa:
             "cidade",
+
+          ia_atendimento_concluido:
+            false,
         }
       );
 
@@ -1685,16 +1797,89 @@ export async function handleIncomingMessage(
         conversationId,
         `${firstName(
           attrs.ia_nome
-        )}, que bom falar com você novamente. Me informe a cidade relacionada ao atendimento, por favor.`
+        )}, que bom falar com você novamente 😊
+
+Me informe a cidade relacionada ao atendimento, por favor.`
       );
 
 
       return {
-        stage: "cidade",
-        return_flow: true,
+        stage:
+          "cidade",
+
+        return_flow:
+          true,
       };
     }
 
+
+    /*
+    Nome e cidade já conhecidos.
+
+    Primeiro verifica se a própria
+    mensagem já contém um pedido de
+    andamento.
+    */
+
+    const progressResult =
+      await tryAnswerProgress(
+        conversationId,
+        text,
+        attrs
+      );
+
+
+    if (
+      progressResult?.handled ===
+      true
+    ) {
+
+      await updateConversationAttributes(
+        conversationId,
+        {
+          ...attrs,
+
+          ia_etapa:
+            "setor",
+
+          ia_atendimento_concluido:
+            false,
+        }
+      );
+
+
+      return {
+        stage:
+          "setor",
+
+        progressAnswered:
+          true,
+
+        return_flow:
+          true,
+      };
+    }
+
+
+    if (
+      progressResult?.forceHandoff ===
+      true
+    ) {
+
+      return handoffToSector(
+        conversationId,
+        attrs,
+        "Atendimento",
+        text
+      );
+    }
+
+
+    /*
+    Tenta identificar diretamente
+    o setor pela primeira mensagem
+    do retorno.
+    */
 
     const sector =
       await classifySector(
@@ -1717,49 +1902,131 @@ export async function handleIncomingMessage(
 
           ia_etapa:
             "motivo",
+
+          ia_atendimento_concluido:
+            false,
         }
       );
 
 
       await sendMessage(
         conversationId,
-        `${firstName(
+        `Olá, ${firstName(
           attrs.ia_nome
-        )}, entendi. Vou direcionar seu atendimento para o setor de ${sector}.
+        )}! Que legal falar com você novamente 😊
 
-Antes de encaminhar, me conte brevemente sobre o que você gostaria de falar. Você pode escrever ou enviar um áudio.`
+Entendi que seu atendimento está relacionado ao setor de ${sector}.
+
+Me conte brevemente sobre o que você gostaria de conversar. Você pode escrever ou enviar um áudio.`
       );
 
 
       return {
-        stage: "motivo",
+        stage:
+          "motivo",
+
         sector,
+
+        return_flow:
+          true,
       };
     }
 
+
+    /*
+    Se não conseguiu entender o assunto,
+    apresenta a saudação de retorno
+    solicitada.
+    */
 
     await updateConversationAttributes(
       conversationId,
       {
         ...attrs,
 
+        ia_setor:
+          "",
+
+        ia_motivo_contato:
+          "",
+
         ia_etapa:
           "setor",
+
+        ia_atendimento_concluido:
+          false,
       }
     );
 
 
     await sendMessage(
       conversationId,
-      menuText(
+      returnMenuText(
         attrs.ia_nome
       )
     );
 
 
     return {
-      stage: "setor",
+      stage:
+        "setor",
+
+      return_flow:
+        true,
     };
+  }
+
+
+  /*
+  ===========================================
+  CONSULTA AUTOMÁTICA DE ANDAMENTO
+  ===========================================
+
+  Durante o atendimento já iniciado,
+  permite que o cliente peça andamento
+  diretamente.
+  */
+
+  if (
+    stage !== "inicio" &&
+    stage !== "nome" &&
+    stage !== "cidade"
+  ) {
+
+    const progressResult =
+      await tryAnswerProgress(
+        conversationId,
+        text,
+        attrs
+      );
+
+
+    if (
+      progressResult?.handled ===
+      true
+    ) {
+
+      return {
+        stage,
+
+        progressAnswered:
+          true,
+      };
+    }
+
+
+    if (
+      progressResult?.forceHandoff ===
+      true
+    ) {
+
+      return handoffToSector(
+        conversationId,
+        attrs,
+        "Atendimento",
+        text
+      );
+    }
   }
 
 
@@ -1792,7 +2059,8 @@ Antes de encaminhar, me conte brevemente sobre o que você gostaria de falar. Vo
 
 
     return {
-      stage: "nome",
+      stage:
+        "nome",
     };
   }
 
@@ -1816,8 +2084,12 @@ Antes de encaminhar, me conte brevemente sobre o que você gostaria de falar. Vo
 
 
       return {
-        stage: "nome",
-        retry: true,
+        stage:
+          "nome",
+
+        retry:
+          true,
+
         reason:
           "invalid_name",
       };
@@ -1840,6 +2112,9 @@ Antes de encaminhar, me conte brevemente sobre o que você gostaria de falar. Vo
 
         ia_etapa:
           "cidade",
+
+        ia_atendimento_concluido:
+          false,
       }
     );
 
@@ -1853,7 +2128,8 @@ Antes de encaminhar, me conte brevemente sobre o que você gostaria de falar. Vo
 
 
     return {
-      stage: "cidade",
+      stage:
+        "cidade",
     };
   }
 
@@ -1881,15 +2157,21 @@ Por favor, me informe apenas o nome da cidade relacionada ao atendimento.`
 
 
       return {
-        stage: "cidade",
-        retry: true,
+        stage:
+          "cidade",
+
+        retry:
+          true,
+
         reason:
           "city_refused",
       };
     }
 
 
-    if (!validCity(text)) {
+    if (
+      !validCity(text)
+    ) {
 
       await sendMessage(
         conversationId,
@@ -1902,8 +2184,12 @@ Por favor, informe apenas o nome da cidade relacionada ao atendimento, por exemp
 
 
       return {
-        stage: "cidade",
-        retry: true,
+        stage:
+          "cidade",
+
+        retry:
+          true,
+
         reason:
           "invalid_city",
       };
@@ -1926,6 +2212,9 @@ Por favor, informe apenas o nome da cidade relacionada ao atendimento, por exemp
 
         ia_etapa:
           "setor",
+
+        ia_atendimento_concluido:
+          false,
       }
     );
 
@@ -1939,7 +2228,9 @@ Por favor, informe apenas o nome da cidade relacionada ao atendimento, por exemp
 
 
     return {
-      stage: "setor",
+      stage:
+        "setor",
+
       city,
     };
   }
@@ -1972,11 +2263,19 @@ ${menuText(
 
 
       return {
-        stage: "setor",
-        retry: true,
+        stage:
+          "setor",
+
+        retry:
+          true,
       };
     }
 
+
+    /*
+    Ainda NÃO encaminha.
+    Primeiro coleta o motivo.
+    */
 
     await updateConversationAttributes(
       conversationId,
@@ -1991,6 +2290,9 @@ ${menuText(
 
         ia_etapa:
           "motivo",
+
+        ia_atendimento_concluido:
+          false,
       }
     );
 
@@ -2006,7 +2308,9 @@ Antes de encaminhar, me conte brevemente sobre o que você gostaria de falar. Vo
 
 
     return {
-      stage: "motivo",
+      stage:
+        "motivo",
+
       sector,
     };
   }
@@ -2042,8 +2346,12 @@ Pode escrever ou enviar um áudio.`
 
 
       return {
-        stage: "motivo",
-        retry: true,
+        stage:
+          "motivo",
+
+        retry:
+          true,
+
         reason:
           "invalid_contact_reason",
       };
@@ -2051,8 +2359,9 @@ Pode escrever ou enviar um áudio.`
 
 
     /*
-    Tenta novamente consultar andamento
-    pelo motivo informado.
+    Se o motivo for andamento,
+    tenta consultar o CRM antes
+    do encaminhamento.
     */
 
     const progressResult =
@@ -2113,9 +2422,7 @@ Pode escrever ou enviar um áudio.`
 
 
     /*
-    ===========================================
-    SEGUNDA CLASSIFICAÇÃO INTELIGENTE
-    ===========================================
+    Segunda classificação inteligente.
     */
 
     const detectedSector =
@@ -2133,6 +2440,7 @@ Pode escrever ou enviar um áudio.`
 
 
     if (detectedSector) {
+
       finalSector =
         detectedSector;
     }
@@ -2148,8 +2456,11 @@ Pode escrever ou enviar um áudio.`
         "Setor corrigido pelo motivo do contato",
         {
           selectedSector,
+
           detectedSector,
-          reason: text,
+
+          reason:
+            text,
         }
       );
     }
@@ -2191,7 +2502,10 @@ Pode escrever ou enviar um áudio.`
 
 
   return {
-    stage: "nome",
-    reset: true,
+    stage:
+      "nome",
+
+    reset:
+      true,
   };
 }
