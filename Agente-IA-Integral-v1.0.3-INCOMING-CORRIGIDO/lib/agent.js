@@ -92,6 +92,497 @@ function firstName(name) {
 
 /*
 ===========================================
+INTENÇÃO DE ANDAMENTO
+===========================================
+*/
+
+function isAndamentoIntent(message) {
+  const text =
+    normalizeText(message);
+
+
+  const terms = [
+    "andamento",
+    "andamentos",
+    "status do processo",
+    "status processo",
+    "como esta meu processo",
+    "como esta o meu processo",
+    "como está meu processo",
+    "como está o meu processo",
+    "em que fase",
+    "em qual fase",
+    "qual etapa",
+    "etapa do processo",
+    "fase do processo",
+    "situacao do processo",
+    "situação do processo",
+    "previsao",
+    "previsão",
+    "quando fica pronto",
+    "quando vai ficar pronto",
+    "quando termina",
+    "quando vai terminar",
+    "ja foi protocolado",
+    "já foi protocolado",
+    "foi protocolado",
+    "protocolo do processo",
+    "protocolo",
+    "prefeitura analisou",
+    "cartorio analisou",
+    "cartório analisou",
+    "registro de imoveis",
+    "registro de imóveis",
+    "crf",
+  ];
+
+
+  return terms.some(
+    (term) =>
+      text.includes(
+        normalizeText(term)
+      )
+  );
+}
+
+
+/*
+===========================================
+CONSULTA CRM / ANDAMENTO
+===========================================
+*/
+
+async function getClientProgress(
+  conversationId
+) {
+  const secret =
+    process.env.CRM_AGENT_READ_SECRET;
+
+
+  const baseUrl =
+    process.env.CRM_BASE_URL ||
+    "https://www.crmintegralreurb.work";
+
+
+  if (!secret) {
+    console.error(
+      "CRM_AGENT_READ_SECRET não configurado no Agente IA."
+    );
+
+    return {
+      ok: false,
+      code:
+        "CRM_SECRET_MISSING",
+    };
+  }
+
+
+  try {
+    const response =
+      await fetch(
+        `${baseUrl}/api/andamento-cliente`,
+        {
+          method:
+            "POST",
+
+          headers: {
+            Authorization:
+              `Bearer ${secret}`,
+
+            "Content-Type":
+              "application/json",
+          },
+
+          body:
+            JSON.stringify({
+              conversation_id:
+                conversationId,
+            }),
+        }
+      );
+
+
+    const text =
+      await response.text();
+
+
+    let data =
+      null;
+
+
+    try {
+      data =
+        text
+          ? JSON.parse(text)
+          : null;
+
+    } catch {
+      data = {
+        ok: false,
+        error:
+          "Resposta inválida do CRM.",
+      };
+    }
+
+
+    if (!response.ok) {
+
+      console.error(
+        "Erro consulta andamento CRM:",
+        {
+          status:
+            response.status,
+
+          response:
+            data,
+        }
+      );
+
+
+      return {
+        ok: false,
+        code:
+          "CRM_REQUEST_ERROR",
+
+        status:
+          response.status,
+      };
+    }
+
+
+    console.log(
+      "Consulta andamento CRM:",
+      {
+        conversationId,
+
+        found:
+          data?.found,
+
+        andamentoAvailable:
+          data?.andamento_available,
+
+        code:
+          data?.code ||
+          null,
+      }
+    );
+
+
+    return data;
+
+  } catch (error) {
+
+    console.error(
+      "Falha de comunicação com CRM:",
+      error
+    );
+
+
+    return {
+      ok: false,
+      code:
+        "CRM_CONNECTION_ERROR",
+    };
+  }
+}
+
+
+/*
+===========================================
+FORMATA RESPOSTA DO ANDAMENTO
+===========================================
+*/
+
+function progressResponseText(data) {
+  const name =
+    firstName(
+      data?.cliente?.nome
+    );
+
+
+  const prefix =
+    name
+      ? `${name}, `
+      : "";
+
+
+  const progress =
+    data?.andamento_atual;
+
+
+  if (!progress) {
+    return null;
+  }
+
+
+  const parts = [];
+
+
+  parts.push(
+    `${prefix}consultei seu processo no nosso sistema.`
+  );
+
+
+  if (data?.projeto?.nome) {
+
+    parts.push(
+      `Projeto/Núcleo: ${data.projeto.nome}.`
+    );
+  }
+
+
+  if (progress.etapa) {
+
+    parts.push(
+      `Etapa atual: ${progress.etapa}.`
+    );
+  }
+
+
+  if (progress.status_operacional) {
+
+    parts.push(
+      `Situação: ${progress.status_operacional}.`
+    );
+  }
+
+
+  if (progress.descricao_cliente) {
+
+    parts.push(
+      progress.descricao_cliente
+    );
+  }
+
+
+  if (progress.previsao) {
+
+    const date =
+      new Date(
+        `${progress.previsao}T12:00:00`
+      );
+
+
+    if (
+      !Number.isNaN(
+        date.getTime()
+      )
+    ) {
+
+      const formatted =
+        new Intl.DateTimeFormat(
+          "pt-BR"
+        ).format(date);
+
+
+      parts.push(
+        `Previsão registrada: ${formatted}.`
+      );
+    }
+  }
+
+
+  if (progress.orientacao_ia) {
+
+    parts.push(
+      progress.orientacao_ia
+    );
+  }
+
+
+  parts.push(
+    "Se quiser, também posso encaminhar seu atendimento para a equipe responsável."
+  );
+
+
+  return parts
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+
+/*
+===========================================
+TENTA RESPONDER ANDAMENTO
+===========================================
+*/
+
+async function tryAnswerProgress(
+  conversationId,
+  text,
+  attrs
+) {
+  if (
+    !isAndamentoIntent(text)
+  ) {
+    return null;
+  }
+
+
+  const result =
+    await getClientProgress(
+      conversationId
+    );
+
+
+  /*
+  CRM indisponível:
+  não bloqueia o atendimento.
+  */
+
+  if (
+    !result ||
+    result.ok === false
+  ) {
+
+    console.warn(
+      "Consulta de andamento indisponível. Fluxo normal será mantido.",
+      {
+        conversationId,
+        code:
+          result?.code ||
+          null,
+      }
+    );
+
+
+    return null;
+  }
+
+
+  /*
+  Cliente não encontrado.
+  Continua para humano.
+  */
+
+  if (
+    result.found === false
+  ) {
+
+    return null;
+  }
+
+
+  /*
+  Cliente encontrado,
+  mas sem Projeto/NUI.
+  */
+
+  if (
+    result.code ===
+    "PROJETO_NAO_VINCULADO"
+  ) {
+
+    await sendMessage(
+      conversationId,
+      `${firstName(
+        attrs?.ia_nome ||
+        result?.cliente?.nome
+      ) || "Olá"}, localizei seu cadastro, mas ele ainda não está vinculado a um Projeto/Núcleo no nosso sistema.
+
+Vou encaminhar seu atendimento para a equipe verificar essa vinculação e consultar o andamento correto.`
+    );
+
+
+    return {
+      handled:
+        false,
+
+      forceHandoff:
+        true,
+
+      reason:
+        "project_not_linked",
+    };
+  }
+
+
+  /*
+  Cliente possui projeto,
+  mas não há andamento liberado.
+  */
+
+  if (
+    result.andamento_available ===
+      false
+  ) {
+
+    await sendMessage(
+      conversationId,
+      `${firstName(
+        attrs?.ia_nome ||
+        result?.cliente?.nome
+      ) || "Olá"}, localizei seu cadastro e o Projeto/Núcleo relacionado, mas não há uma atualização de andamento liberada para consulta automática neste momento.
+
+Vou encaminhar seu atendimento para a equipe responsável verificar a situação atual.`
+    );
+
+
+    return {
+      handled:
+        false,
+
+      forceHandoff:
+        true,
+
+      reason:
+        "progress_not_available",
+    };
+  }
+
+
+  /*
+  Andamento encontrado.
+  Responde diretamente.
+  */
+
+  const message =
+    progressResponseText(
+      result
+    );
+
+
+  if (!message) {
+    return null;
+  }
+
+
+  await sendMessage(
+    conversationId,
+    message
+  );
+
+
+  await updateConversationAttributes(
+    conversationId,
+    {
+      ...attrs,
+
+      ia_ultima_consulta_andamento:
+        new Date().toISOString(),
+
+      ia_etapa:
+        attrs?.ia_etapa ||
+        "setor",
+
+      ia_atendimento_concluido:
+        false,
+    }
+  );
+
+
+  return {
+    handled:
+      true,
+
+    andamento:
+      result,
+  };
+}
+
+
+/*
+===========================================
 NOME
 ===========================================
 */
@@ -381,38 +872,29 @@ function validContactReason(value) {
   const invalid = [
     "nao sei",
     "não sei",
-
     "nao quero dizer",
     "não quero dizer",
-
     "nao quero falar",
     "não quero falar",
-
     "prefiro nao dizer",
     "prefiro não dizer",
-
     "nada",
     "nenhum",
     "nenhuma",
-
     "qualquer coisa",
     "tanto faz",
     "sei la",
     "sei lá",
-
     "sim",
     "nao",
     "não",
-
     "ok",
     "okay",
     "beleza",
     "blz",
-
     "bom dia",
     "boa tarde",
     "boa noite",
-
     "teste",
     "testando",
     "abc",
@@ -1098,15 +1580,64 @@ export async function handleIncomingMessage(
 
   /*
   ===========================================
+  CONSULTA AUTOMÁTICA DE ANDAMENTO
+  ===========================================
+
+  Antes de classificar ou encaminhar,
+  verifica se o cliente está perguntando
+  pelo andamento do próprio processo.
+  */
+
+  if (
+    stage !== "nome" &&
+    stage !== "cidade"
+  ) {
+
+    const progressResult =
+      await tryAnswerProgress(
+        conversationId,
+        text,
+        attrs
+      );
+
+
+    if (
+      progressResult?.handled ===
+      true
+    ) {
+
+      return {
+        stage:
+          stage,
+
+        progressAnswered:
+          true,
+      };
+    }
+
+
+    if (
+      progressResult?.forceHandoff ===
+      true
+    ) {
+
+      return handoffToSector(
+        conversationId,
+        attrs,
+        "Atendimento",
+        text
+      );
+    }
+  }
+
+
+  /*
+  ===========================================
   RETORNO
   ===========================================
   */
 
   if (stage === "retorno") {
-
-    /*
-    Se não temos nome
-    */
 
     if (!attrs.ia_nome) {
 
@@ -1137,10 +1668,6 @@ export async function handleIncomingMessage(
     }
 
 
-    /*
-    Se não temos cidade
-    */
-
     if (!attrs.ia_cidade) {
 
       await updateConversationAttributes(
@@ -1168,11 +1695,6 @@ export async function handleIncomingMessage(
       };
     }
 
-
-    /*
-    Tenta entender diretamente
-    o assunto do retorno.
-    */
 
     const sector =
       await classifySector(
@@ -1456,13 +1978,6 @@ ${menuText(
     }
 
 
-    /*
-    IMPORTANTE:
-    Ainda NÃO encaminha.
-
-    Agora coleta o motivo.
-    */
-
     await updateConversationAttributes(
       conversationId,
       {
@@ -1536,12 +2051,71 @@ Pode escrever ou enviar um áudio.`
 
 
     /*
+    Tenta novamente consultar andamento
+    pelo motivo informado.
+    */
+
+    const progressResult =
+      await tryAnswerProgress(
+        conversationId,
+        text,
+        attrs
+      );
+
+
+    if (
+      progressResult?.handled ===
+      true
+    ) {
+
+      await updateConversationAttributes(
+        conversationId,
+        {
+          ...attrs,
+
+          ia_setor:
+            "Atendimento",
+
+          ia_motivo_contato:
+            text,
+
+          ia_etapa:
+            "setor",
+
+          ia_atendimento_concluido:
+            false,
+        }
+      );
+
+
+      return {
+        stage:
+          "setor",
+
+        progressAnswered:
+          true,
+      };
+    }
+
+
+    if (
+      progressResult?.forceHandoff ===
+      true
+    ) {
+
+      return handoffToSector(
+        conversationId,
+        attrs,
+        "Atendimento",
+        text
+      );
+    }
+
+
+    /*
     ===========================================
     SEGUNDA CLASSIFICAÇÃO INTELIGENTE
     ===========================================
-
-    Aqui a IA analisa o motivo e pode
-    corrigir o setor escolhido pelo cliente.
     */
 
     const detectedSector =
@@ -1558,21 +2132,11 @@ Pode escrever ou enviar um áudio.`
       selectedSector;
 
 
-    /*
-    Só troca se a IA realmente
-    identificou um setor.
-    */
-
     if (detectedSector) {
       finalSector =
         detectedSector;
     }
 
-
-    /*
-    Se o setor mudou, atualiza
-    silenciosamente antes do envio.
-    */
 
     if (
       detectedSector &&
