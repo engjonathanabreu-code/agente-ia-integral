@@ -780,6 +780,8 @@ function directSectorMatch(message) {
         "novo servico",
         "novo serviço",
         "vendas",
+        "regulariz",
+        "legaliz",
       ],
     ],
 
@@ -916,7 +918,13 @@ Financeiro:
 boleto, cobrança, pagamento, parcela, PIX, nota fiscal, comprovante, vencimento e valores relacionados a obrigações já existentes.
 
 Comercial:
-orçamento, proposta, contratação, preço de novo serviço e vendas.
+orçamento, proposta, contratação, preço de novo serviço, vendas, e qualquer cliente NOVO pedindo para iniciar, começar ou fazer a regularização/legalização de um imóvel ou terreno que ainda não foi protocolado (ex.: "quero regularizar meu terreno", "gostaria de iniciar a regularização", "como faço para legalizar minha casa", "quero começar o processo").
+
+Nesses casos de início de regularização:
+sector = "Comercial"
+confidence = "high"
+needsClarification = false
+NÃO pergunte se o cliente já protocolou algo, nem peça planta/projeto/topografia antes de classificar — pedido de início de regularização é sempre Comercial, direto.
 
 IMPORTANTE:
 A palavra "valor" sozinha NÃO significa Comercial.
@@ -943,7 +951,7 @@ Topografia:
 medição, levantamento, campo, demarcação e topógrafo.
 
 Pós-Protocolo:
-somente quando o caso já foi protocolado ou envolve claramente Prefeitura, Cartório, Registro de Imóveis ou CRF.
+somente quando o cliente já tem um caso em andamento (já foi protocolado) ou pergunta sobre Prefeitura, Cartório, Registro de Imóveis ou CRF de um processo que já existe. Um cliente novo pedindo para "iniciar"/"começar" a regularização NUNCA é Pós-Protocolo — é Comercial.
 
 Atendimento:
 documentação, dúvidas gerais e assuntos administrativos.
