@@ -1260,21 +1260,14 @@ async function handoffToSector(
     }
   );
 
-  if (assigned) {
-    if (customMessage) {
-      await sendMessage(
-        conversationId,
-        customMessage
-      );
-    }
-
-    return {
-      stage: "encaminhado",
-      sector,
-      assigned: true,
-    };
-  }
-
+  /*
+  Sempre avisamos o cliente para onde o
+  encaminhamos, mesmo quando a atribuição
+  da equipe no Chatwoot falha internamente
+  (assigned = false). Sem isso, o cliente
+  fica sem resposta até um agente humano
+  entrar em contato manualmente.
+  */
   await sendMessage(
     conversationId,
 
@@ -1282,13 +1275,13 @@ async function handoffToSector(
 
     `${firstName(
       attrs.ia_nome
-    ) || "Olá"}, registrei sua solicitação para o setor de ${sector}. A equipe responsável dará continuidade por aqui.`
+    ) || "Olá"}, entendi! Vou te direcionar para o setor de ${sector}, alguém da nossa equipe continua o atendimento por aqui.`
   );
 
   return {
     stage: "encaminhado",
     sector,
-    assigned: false,
+    assigned,
   };
 }
 
