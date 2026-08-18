@@ -12,7 +12,6 @@ import {
   transcriptionFromPayload,
 } from "./audio.js";
 
-
 const SECTORS = [
   "Atendimento",
   "Comercial",
@@ -22,32 +21,12 @@ const SECTORS = [
   "Pós-Protocolo",
 ];
 
-
 const TEAM_ALIASES = {
   Atendimento: ["atendimento"],
-
-  Comercial: [
-    "comercial",
-    "vendas",
-  ],
-
-  Financeiro: [
-    "financeiro",
-    "cobranca",
-    "cobrança",
-  ],
-
-  Projetos: [
-    "projetos",
-    "projeto",
-  ],
-
-  Topografia: [
-    "topografia",
-    "topografico",
-    "topográfico",
-  ],
-
+  Comercial: ["comercial", "vendas"],
+  Financeiro: ["financeiro", "cobranca", "cobrança"],
+  Projetos: ["projetos", "projeto"],
+  Topografia: ["topografia", "topografico", "topográfico"],
   "Pós-Protocolo": [
     "pós-protocolo",
     "pos-protocolo",
@@ -55,7 +34,6 @@ const TEAM_ALIASES = {
     "pos protocolo",
   ],
 };
-
 
 /*
 ===========================================
@@ -72,30 +50,23 @@ function normalize(value) {
 }
 
 function normalizeText(value) {
-  return normalize(value)
-    .replace(/\s+/g, " ");
+  return normalize(value).replace(/\s+/g, " ");
 }
 
 function firstName(name) {
-  return (
-    String(name || "")
-      .trim()
-      .split(/\s+/)[0] ||
-    ""
-  );
+  return String(name || "").trim().split(/\s+/)[0] || "";
 }
-
 
 /*
 ===========================================
-SAUDAÇÃO SIMPLES
+SAUDAÇÃO
 ===========================================
 */
 
 function isSimpleGreeting(message) {
   const text = normalizeText(message);
 
-  const greetings = [
+  return [
     "oi",
     "ola",
     "olá",
@@ -107,13 +78,47 @@ function isSimpleGreeting(message) {
     "e aí",
     "tudo bem",
     "como vai",
-  ];
-
-  return greetings
+  ]
     .map(normalizeText)
     .includes(text);
 }
 
+/*
+===========================================
+PEDIDO PARA FALAR COM HUMANO
+===========================================
+*/
+
+function isHumanRequest(message) {
+  const text = normalizeText(message);
+
+  const terms = [
+    "falar com alguem",
+    "falar com alguém",
+    "falar com uma pessoa",
+    "falar com atendente",
+    "falar com um atendente",
+    "falar com humano",
+    "falar com um humano",
+    "quero falar com alguem",
+    "quero falar com alguém",
+    "quero falar com uma pessoa",
+    "gostaria de falar com alguem",
+    "gostaria de falar com alguém",
+    "gostaria de falar com uma pessoa",
+    "preciso falar com alguem",
+    "preciso falar com alguém",
+    "preciso falar com uma pessoa",
+    "tem alguem ai",
+    "tem alguém aí",
+    "alguem ai",
+    "alguém aí",
+  ];
+
+  return terms.some((term) =>
+    text.includes(normalizeText(term))
+  );
+}
 
 /*
 ===========================================
@@ -158,14 +163,10 @@ function isAndamentoIntent(message) {
     "crf",
   ];
 
-  return terms.some(
-    (term) =>
-      text.includes(
-        normalizeText(term)
-      )
+  return terms.some((term) =>
+    text.includes(normalizeText(term))
   );
 }
-
 
 /*
 ===========================================
@@ -181,9 +182,7 @@ function isAmbiguousValueIntent(message) {
     text.includes("preco") ||
     text.includes("preço");
 
-  if (!hasValue) {
-    return false;
-  }
+  if (!hasValue) return false;
 
   const clearFinancial = [
     "boleto",
@@ -209,22 +208,15 @@ function isAmbiguousValueIntent(message) {
   ];
 
   const isClear =
-    clearFinancial.some(
-      (term) =>
-        text.includes(
-          normalizeText(term)
-        )
+    clearFinancial.some((term) =>
+      text.includes(normalizeText(term))
     ) ||
-    clearCommercial.some(
-      (term) =>
-        text.includes(
-          normalizeText(term)
-        )
+    clearCommercial.some((term) =>
+      text.includes(normalizeText(term))
     );
 
   return !isClear;
 }
-
 
 /*
 ===========================================
@@ -255,14 +247,10 @@ function isSensitiveActionIntent(message) {
     "aprovar",
   ];
 
-  return terms.some(
-    (term) =>
-      text.includes(
-        normalizeText(term)
-      )
+  return terms.some((term) =>
+    text.includes(normalizeText(term))
   );
 }
-
 
 /*
 ===========================================
@@ -270,11 +258,8 @@ CRM / ANDAMENTO
 ===========================================
 */
 
-async function getClientProgress(
-  conversationId
-) {
-  const secret =
-    process.env.CRM_AGENT_READ_SECRET;
+async function getClientProgress(conversationId) {
+  const secret = process.env.CRM_AGENT_READ_SECRET;
 
   const baseUrl =
     process.env.CRM_BASE_URL ||
@@ -287,49 +272,37 @@ async function getClientProgress(
 
     return {
       ok: false,
-      code:
-        "CRM_SECRET_MISSING",
+      code: "CRM_SECRET_MISSING",
     };
   }
 
   try {
-    const response =
-      await fetch(
-        `${baseUrl}/api/andamento-cliente`,
-        {
-          method: "POST",
+    const response = await fetch(
+      `${baseUrl}/api/andamento-cliente`,
+      {
+        method: "POST",
 
-          headers: {
-            Authorization:
-              `Bearer ${secret}`,
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          "Content-Type": "application/json",
+        },
 
-            "Content-Type":
-              "application/json",
-          },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+        }),
+      }
+    );
 
-          body:
-            JSON.stringify({
-              conversation_id:
-                conversationId,
-            }),
-        }
-      );
-
-    const raw =
-      await response.text();
+    const raw = await response.text();
 
     let data = null;
 
     try {
-      data =
-        raw
-          ? JSON.parse(raw)
-          : null;
+      data = raw ? JSON.parse(raw) : null;
     } catch {
       data = {
         ok: false,
-        error:
-          "Resposta inválida do CRM.",
+        error: "Resposta inválida do CRM.",
       };
     }
 
@@ -337,16 +310,14 @@ async function getClientProgress(
       console.error(
         "Erro consulta andamento CRM:",
         {
-          status:
-            response.status,
+          status: response.status,
           data,
         }
       );
 
       return {
         ok: false,
-        code:
-          "CRM_REQUEST_ERROR",
+        code: "CRM_REQUEST_ERROR",
       };
     }
 
@@ -354,16 +325,10 @@ async function getClientProgress(
       "Consulta andamento CRM:",
       {
         conversationId,
-
-        found:
-          data?.found,
-
+        found: data?.found,
         andamentoAvailable:
           data?.andamento_available,
-
-        code:
-          data?.code ||
-          null,
+        code: data?.code || null,
       }
     );
 
@@ -377,12 +342,39 @@ async function getClientProgress(
 
     return {
       ok: false,
-      code:
-        "CRM_CONNECTION_ERROR",
+      code: "CRM_CONNECTION_ERROR",
     };
   }
 }
 
+/*
+===========================================
+ORIENTAÇÃO INTERNA DA IA
+===========================================
+*/
+
+function customerTextFromAiOrientation(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) return null;
+
+  const text = normalizeText(raw);
+
+  if (
+    text.includes("empresa fez o possivel") ||
+    text.includes("empresa fez o possível") ||
+    text.includes("acelerar o processo") ||
+    text.includes("dar celeridade")
+  ) {
+    return "A empresa realizou todas as providências ao seu alcance para dar celeridade ao processo e, neste momento, aguardamos a atuação do órgão responsável.";
+  }
+
+  /*
+  Qualquer orientação não reconhecida é tratada
+  como instrução interna e não aparece ao cliente.
+  */
+  return null;
+}
 
 /*
 ===========================================
@@ -441,11 +433,7 @@ function progressResponseText(data) {
         `${progress.previsao}T12:00:00`
       );
 
-    if (
-      !Number.isNaN(
-        date.getTime()
-      )
-    ) {
+    if (!Number.isNaN(date.getTime())) {
       const formatted =
         new Intl.DateTimeFormat(
           "pt-BR"
@@ -457,21 +445,25 @@ function progressResponseText(data) {
     }
   }
 
-  if (progress.orientacao_ia) {
-    parts.push(
+  const orientationText =
+    customerTextFromAiOrientation(
       progress.orientacao_ia
+    );
+
+  if (orientationText) {
+    parts.push(
+      orientationText
     );
   }
 
   parts.push(
-    "Se precisar de mais alguma informação sobre esse processo, pode me perguntar por aqui."
+    "Se precisar de mais alguma informação sobre esse processo, pode me perguntar por aqui. Se preferir falar com nossa equipe, também posso direcionar seu atendimento."
   );
 
   return parts
     .filter(Boolean)
     .join("\n\n");
 }
-
 
 /*
 ===========================================
@@ -484,9 +476,7 @@ async function tryAnswerProgress(
   text,
   attrs
 ) {
-  if (
-    !isAndamentoIntent(text)
-  ) {
+  if (!isAndamentoIntent(text)) {
     return null;
   }
 
@@ -502,9 +492,7 @@ async function tryAnswerProgress(
     return null;
   }
 
-  if (
-    result.found === false
-  ) {
+  if (result.found === false) {
     return null;
   }
 
@@ -514,11 +502,8 @@ async function tryAnswerProgress(
   ) {
     return {
       handled: false,
-
       forceHandoff: true,
-
-      reason:
-        "project_not_linked",
+      reason: "project_not_linked",
 
       handoffMessage:
         `${firstName(
@@ -534,11 +519,8 @@ async function tryAnswerProgress(
   ) {
     return {
       handled: false,
-
       forceHandoff: true,
-
-      reason:
-        "progress_not_available",
+      reason: "progress_not_available",
 
       handoffMessage:
         `${firstName(
@@ -570,6 +552,9 @@ async function tryAnswerProgress(
       ia_ultima_consulta_andamento:
         new Date().toISOString(),
 
+      ia_ultimo_contexto:
+        "andamento",
+
       ia_atendimento_concluido:
         false,
     }
@@ -580,7 +565,6 @@ async function tryAnswerProgress(
     andamento: result,
   };
 }
-
 
 /*
 ===========================================
@@ -618,7 +602,6 @@ function validFullName(value) {
     clean
   );
 }
-
 
 /*
 ===========================================
@@ -680,7 +663,6 @@ function validCity(value) {
   );
 }
 
-
 /*
 ===========================================
 MOTIVO
@@ -703,7 +685,6 @@ function validContactReason(value) {
   return !isSimpleGreeting(clean);
 }
 
-
 /*
 ===========================================
 CLASSIFICAÇÃO DIRETA
@@ -713,6 +694,18 @@ CLASSIFICAÇÃO DIRETA
 function directSectorMatch(message) {
   const t =
     normalizeText(message);
+
+  /*
+  Número do menu tem prioridade.
+  */
+  const numeric =
+    t.match(/^([1-6])$/)?.[1];
+
+  if (numeric) {
+    return SECTORS[
+      Number(numeric) - 1
+    ];
+  }
 
   const patterns = [
     [
@@ -794,8 +787,6 @@ function directSectorMatch(message) {
       "Atendimento",
       [
         "atendimento",
-        "atendente",
-        "humano",
         "duvida",
         "dúvida",
         "informacao",
@@ -822,18 +813,8 @@ function directSectorMatch(message) {
     }
   }
 
-  const numeric =
-    t.match(/^([1-6])$/)?.[1];
-
-  if (numeric) {
-    return SECTORS[
-      Number(numeric) - 1
-    ];
-  }
-
   return null;
 }
-
 
 /*
 ===========================================
@@ -841,9 +822,7 @@ CLASSIFICADOR CONTEXTUAL
 ===========================================
 */
 
-async function contextualIntent(
-  message
-) {
+async function contextualIntent(message) {
   if (
     isAmbiguousValueIntent(
       message
@@ -851,15 +830,9 @@ async function contextualIntent(
   ) {
     return {
       sector: null,
-
-      confidence:
-        "medium",
-
-      needsClarification:
-        true,
-
-      needsHuman:
-        false,
+      confidence: "medium",
+      needsClarification: true,
+      needsHuman: false,
 
       clarificationQuestion:
         "Esse valor é sobre uma cobrança ou pagamento já existente, ou sobre orçamento/proposta de um novo serviço?",
@@ -878,22 +851,16 @@ async function contextualIntent(
     )
   ) {
     return {
-      sector:
-        direct,
-
-      confidence:
-        "high",
-
-      needsClarification:
-        false,
+      sector: direct,
+      confidence: "high",
+      needsClarification: false,
 
       needsHuman:
         isSensitiveActionIntent(
           message
         ),
 
-      clarificationQuestion:
-        null,
+      clarificationQuestion: null,
     };
   }
 
@@ -902,8 +869,7 @@ async function contextualIntent(
 
   if (!apiKey) {
     return {
-      sector:
-        direct,
+      sector: direct,
 
       confidence:
         direct
@@ -913,11 +879,8 @@ async function contextualIntent(
       needsClarification:
         !direct,
 
-      needsHuman:
-        false,
-
-      clarificationQuestion:
-        null,
+      needsHuman: false,
+      clarificationQuestion: null,
     };
   }
 
@@ -933,8 +896,7 @@ async function contextualIntent(
         "gpt-5",
 
       reasoning: {
-        effort:
-          "low",
+        effort: "low",
       },
 
       instructions: `
@@ -958,10 +920,12 @@ orçamento, proposta, contratação, preço de novo serviço e vendas.
 
 IMPORTANTE:
 A palavra "valor" sozinha NÃO significa Comercial.
+
 Frases como:
 "tenho um problema com um valor"
 "tenho dúvida sobre um valor"
 "quero falar sobre um valor"
+
 são ambíguas.
 
 Nesses casos:
@@ -1012,10 +976,13 @@ Nunca invente informações.
           : null,
 
       confidence:
-        ["high", "medium", "low"]
-          .includes(
-            parsed.confidence
-          )
+        [
+          "high",
+          "medium",
+          "low",
+        ].includes(
+          parsed.confidence
+        )
           ? parsed.confidence
           : "low",
 
@@ -1041,8 +1008,7 @@ Nunca invente informações.
     );
 
     return {
-      sector:
-        direct,
+      sector: direct,
 
       confidence:
         direct
@@ -1052,15 +1018,11 @@ Nunca invente informações.
       needsClarification:
         !direct,
 
-      needsHuman:
-        false,
-
-      clarificationQuestion:
-        null,
+      needsHuman: false,
+      clarificationQuestion: null,
     };
   }
 }
-
 
 /*
 ===========================================
@@ -1068,9 +1030,7 @@ TEXTO OU ÁUDIO
 ===========================================
 */
 
-async function extractCustomerText(
-  payload
-) {
+async function extractCustomerText(payload) {
   const text =
     String(
       payload?.content ||
@@ -1080,8 +1040,7 @@ async function extractCustomerText(
   if (text) {
     return {
       text,
-      source:
-        "text",
+      source: "text",
     };
   }
 
@@ -1093,11 +1052,8 @@ async function extractCustomerText(
 
     if (transcription) {
       return {
-        text:
-          transcription,
-
-        source:
-          "audio",
+        text: transcription,
+        source: "audio",
       };
     }
 
@@ -1110,11 +1066,9 @@ async function extractCustomerText(
 
   return {
     text: "",
-    source:
-      "unknown",
+    source: "unknown",
   };
 }
-
 
 /*
 ===========================================
@@ -1122,9 +1076,7 @@ LOCALIZA TIME
 ===========================================
 */
 
-async function findTeamIdForSector(
-  sector
-) {
+async function findTeamIdForSector(sector) {
   const teams =
     await listTeams();
 
@@ -1151,18 +1103,32 @@ async function findTeamIdForSector(
       }
     );
 
-  return found?.id ||
-    null;
+  return found?.id || null;
 }
-
 
 /*
 ===========================================
-MENU FALLBACK
+MENUS
 ===========================================
 */
 
-function menuText(name) {
+function sectorMenuText(name) {
+  const prefix =
+    name
+      ? `${firstName(name)}, `
+      : "";
+
+  return `${prefix}para eu direcionar você à equipe correta, escolha o setor com o qual deseja falar:
+
+1. Atendimento
+2. Comercial
+3. Financeiro
+4. Projetos
+5. Topografia
+6. Pós-Protocolo`;
+}
+
+function fallbackMenuText(name) {
   const prefix =
     name
       ? `${firstName(name)}, `
@@ -1180,6 +1146,52 @@ Você pode me explicar brevemente o que precisa ou escolher uma opção:
 6. Pós-Protocolo`;
 }
 
+/*
+===========================================
+ABRE SELEÇÃO DE SETOR
+===========================================
+*/
+
+async function openSectorSelection(
+  conversationId,
+  attrs
+) {
+  await updateConversationAttributes(
+    conversationId,
+    {
+      ...attrs,
+
+      ia_etapa:
+        "setor",
+
+      ia_setor:
+        "",
+
+      ia_motivo_contato:
+        "",
+
+      ia_tentativas_esclarecimento:
+        0,
+
+      ia_atendimento_concluido:
+        false,
+    }
+  );
+
+  await sendMessage(
+    conversationId,
+    sectorMenuText(
+      attrs.ia_nome
+    )
+  );
+
+  return {
+    handled: true,
+    action:
+      "human_requested_sector_menu",
+    stage: "setor",
+  };
+}
 
 /*
 ===========================================
@@ -1199,8 +1211,7 @@ async function handoffToSector(
       sector
     );
 
-  let assigned =
-    false;
+  let assigned = false;
 
   if (teamId) {
     try {
@@ -1209,8 +1220,7 @@ async function handoffToSector(
         teamId
       );
 
-      assigned =
-        true;
+      assigned = true;
 
     } catch (error) {
       console.error(
@@ -1242,14 +1252,6 @@ async function handoffToSector(
     }
   );
 
-  /*
-  IMPORTANTE:
-  Se conseguiu atribuir equipe,
-  NÃO manda outra mensagem genérica.
-  O próprio Chatwoot já apresenta
-  o agente humano.
-  */
-
   if (assigned) {
     if (customMessage) {
       await sendMessage(
@@ -1259,40 +1261,28 @@ async function handoffToSector(
     }
 
     return {
-      stage:
-        "encaminhado",
-
+      stage: "encaminhado",
       sector,
-
-      assigned:
-        true,
+      assigned: true,
     };
   }
 
-  /*
-  Se não conseguiu atribuir,
-  informa ao cliente.
-  */
-
   await sendMessage(
     conversationId,
+
     customMessage ||
+
     `${firstName(
       attrs.ia_nome
     ) || "Olá"}, registrei sua solicitação para o setor de ${sector}. A equipe responsável dará continuidade por aqui.`
   );
 
   return {
-    stage:
-      "encaminhado",
-
+    stage: "encaminhado",
     sector,
-
-    assigned:
-      false,
+    assigned: false,
   };
 }
-
 
 /*
 ===========================================
@@ -1303,47 +1293,70 @@ ROTEAMENTO INTELIGENTE
 async function routeCustomerNeed(
   conversationId,
   attrs,
-  text
+  text,
+  options = {}
 ) {
+  const {
+    allowProgress = true,
+  } = options;
+
   /*
-  Andamento primeiro.
+  Pedido para falar com alguém
+  NÃO encaminha direto.
+
+  Primeiro abre o menu.
   */
 
-  const progressResult =
-    await tryAnswerProgress(
+  if (isHumanRequest(text)) {
+    return openSectorSelection(
       conversationId,
-      text,
       attrs
-    );
-
-  if (
-    progressResult?.handled ===
-    true
-  ) {
-    return {
-      handled:
-        true,
-
-      action:
-        "progress_answer",
-    };
-  }
-
-  if (
-    progressResult?.forceHandoff ===
-    true
-  ) {
-    return handoffToSector(
-      conversationId,
-      attrs,
-      "Atendimento",
-      text,
-      progressResult.handoffMessage
     );
   }
 
   /*
-  "Valor" ambíguo.
+  Consulta de andamento.
+
+  Quando estamos coletando o MOTIVO,
+  allowProgress será false para evitar
+  que a IA mostre o andamento novamente.
+  */
+
+  if (allowProgress) {
+    const progressResult =
+      await tryAnswerProgress(
+        conversationId,
+        text,
+        attrs
+      );
+
+    if (
+      progressResult?.handled ===
+      true
+    ) {
+      return {
+        handled: true,
+        action:
+          "progress_answer",
+      };
+    }
+
+    if (
+      progressResult?.forceHandoff ===
+      true
+    ) {
+      return handoffToSector(
+        conversationId,
+        attrs,
+        "Atendimento",
+        text,
+        progressResult.handoffMessage
+      );
+    }
+  }
+
+  /*
+  VALOR AMBÍGUO
   */
 
   if (
@@ -1372,22 +1385,21 @@ async function routeCustomerNeed(
 
     await sendMessage(
       conversationId,
+
       `${firstName(
         attrs.ia_nome
       ) || "Claro"}, esse valor é sobre uma cobrança ou pagamento já existente, ou sobre orçamento/proposta de um novo serviço?`
     );
 
     return {
-      handled:
-        true,
-
+      handled: true,
       action:
         "clarification_value",
     };
   }
 
   /*
-  Ação sensível.
+  AÇÃO SENSÍVEL
   */
 
   if (
@@ -1403,9 +1415,13 @@ async function routeCustomerNeed(
     return handoffToSector(
       conversationId,
       attrs,
+
       classification.sector ||
+      attrs.ia_setor ||
       "Atendimento",
+
       text,
+
       `${firstName(
         attrs.ia_nome
       ) || "Olá"}, esse tipo de solicitação precisa ser analisado diretamente pela nossa equipe.`
@@ -1422,20 +1438,38 @@ async function routeCustomerNeed(
     {
       text,
       intent,
+
+      selectedSector:
+        attrs.ia_setor ||
+        null,
     }
   );
 
-  if (
-    intent.needsHuman
-  ) {
+  /*
+  A escolha feita no menu funciona como
+  preferência.
+
+  Mas se o motivo mostrar claramente que
+  pertence a outro setor, a IA pode corrigir.
+  */
+
+  const preferredSector =
+    intent.sector ||
+    attrs.ia_setor ||
+    "Atendimento";
+
+  if (intent.needsHuman) {
     return handoffToSector(
       conversationId,
       attrs,
-      intent.sector ||
-      "Atendimento",
+      preferredSector,
       text
     );
   }
+
+  /*
+  CLASSIFICAÇÃO FORTE
+  */
 
   if (
     intent.sector &&
@@ -1453,6 +1487,34 @@ async function routeCustomerNeed(
     );
   }
 
+  /*
+  Cliente escolheu setor e explicou
+  um motivo válido.
+
+  Mesmo se a IA não conseguir classificar
+  com confiança, não deixamos travar.
+  */
+
+  if (
+    attrs.ia_setor &&
+    validContactReason(
+      text
+    ) &&
+    intent.confidence ===
+      "low"
+  ) {
+    return handoffToSector(
+      conversationId,
+      attrs,
+      attrs.ia_setor,
+      text
+    );
+  }
+
+  /*
+  ESCLARECIMENTO
+  */
+
   if (
     intent.needsClarification ||
     intent.confidence ===
@@ -1464,18 +1526,16 @@ async function routeCustomerNeed(
         0
       );
 
-    if (
-      attempts >= 1
-    ) {
+    if (attempts >= 1) {
       return handoffToSector(
         conversationId,
         attrs,
-        intent.sector ||
-        "Atendimento",
+        preferredSector,
         text,
+
         `${firstName(
           attrs.ia_nome
-        ) || "Olá"}, não consegui identificar sua necessidade com segurança, então vou encaminhar para nossa equipe continuar com você.`
+        ) || "Olá"}, não consegui identificar sua necessidade com total segurança, então vou encaminhar para nossa equipe continuar com você.`
       );
     }
 
@@ -1489,6 +1549,7 @@ async function routeCustomerNeed(
 
         ia_setor:
           intent.sector ||
+          attrs.ia_setor ||
           "",
 
         ia_tentativas_esclarecimento:
@@ -1501,20 +1562,24 @@ async function routeCustomerNeed(
 
     await sendMessage(
       conversationId,
+
       intent.clarificationQuestion ||
+
       `${firstName(
         attrs.ia_nome
       ) || "Claro"}, pode me explicar um pouco melhor o que você precisa?`
     );
 
     return {
-      handled:
-        true,
-
+      handled: true,
       action:
         "clarification",
     };
   }
+
+  /*
+  FALLBACK PARA MENU
+  */
 
   await updateConversationAttributes(
     conversationId,
@@ -1531,20 +1596,17 @@ async function routeCustomerNeed(
 
   await sendMessage(
     conversationId,
-    menuText(
+    fallbackMenuText(
       attrs.ia_nome
     )
   );
 
   return {
-    handled:
-      true,
-
+    handled: true,
     action:
       "fallback_menu",
   };
 }
-
 
 /*
 ===========================================
@@ -1562,9 +1624,7 @@ export async function handleConversationStatusChanged(
 
   if (!conversationId) {
     return {
-      ignored:
-        true,
-
+      ignored: true,
       reason:
         "conversation_id_missing",
     };
@@ -1582,9 +1642,7 @@ export async function handleConversationStatusChanged(
     "resolved"
   ) {
     return {
-      ignored:
-        true,
-
+      ignored: true,
       reason:
         "status_not_resolved",
     };
@@ -1622,14 +1680,10 @@ export async function handleConversationStatusChanged(
   );
 
   return {
-    stage:
-      "retorno",
-
-    rearmed:
-      true,
+    stage: "retorno",
+    rearmed: true,
   };
 }
-
 
 /*
 ===========================================
@@ -1661,13 +1715,12 @@ export async function handleIncomingMessage(
   if (!text) {
     await sendMessage(
       conversationId,
+
       "Não consegui interpretar essa mensagem. Você pode escrever novamente ou enviar o áudio mais uma vez?"
     );
 
     return {
-      ignored:
-        true,
-
+      ignored: true,
       reason:
         "unreadable_message",
     };
@@ -1691,12 +1744,15 @@ export async function handleIncomingMessage(
     {
       conversationId,
       stage,
+
       name:
         attrs.ia_nome ||
         null,
+
       city:
         attrs.ia_cidade ||
         null,
+
       text,
     }
   );
@@ -1714,9 +1770,7 @@ export async function handleIncomingMessage(
       "encaminhado"
   ) {
     return {
-      ignored:
-        true,
-
+      ignored: true,
       reason:
         "human_handoff_active",
     };
@@ -1724,12 +1778,8 @@ export async function handleIncomingMessage(
 
   /*
   ===========================================
-  SAUDAÇÃO TEM PRIORIDADE GLOBAL
+  SAUDAÇÃO GLOBAL
   ===========================================
-
-  Se já conhecemos nome e cidade,
-  "Bom dia" nunca deve cair em
-  motivo, esclarecimento ou menu antigo.
   */
 
   if (
@@ -1763,6 +1813,7 @@ export async function handleIncomingMessage(
 
     await sendMessage(
       conversationId,
+
       `Olá, ${firstName(
         attrs.ia_nome
       )}! Que bom falar com você novamente 😊
@@ -1828,6 +1879,7 @@ Como posso ajudar hoje?`
 
     await sendMessage(
       conversationId,
+
       "Olá! 👋 Sou o assistente virtual da Integral Soluções em Engenharia. Para iniciarmos, por favor, informe seu nome completo."
     );
 
@@ -1854,6 +1906,7 @@ Como posso ajudar hoje?`
     ) {
       await sendMessage(
         conversationId,
+
         "Para registrar seu atendimento corretamente, preciso do seu nome completo. Por favor, informe seu nome e sobrenome."
       );
 
@@ -1883,6 +1936,7 @@ Como posso ajudar hoje?`
 
     await sendMessage(
       conversationId,
+
       `Obrigado, ${firstName(
         cleanName
       )}. Agora me informe a cidade relacionada ao atendimento.`
@@ -1911,6 +1965,7 @@ Como posso ajudar hoje?`
     ) {
       await sendMessage(
         conversationId,
+
         `${firstName(
           attrs.ia_nome
         )}, me informe apenas o nome da cidade relacionada ao atendimento, por favor.`
@@ -1945,6 +2000,7 @@ Como posso ajudar hoje?`
 
     await sendMessage(
       conversationId,
+
       `${firstName(
         attrs.ia_nome
       )}, obrigado. Como posso ajudar você hoje?`
@@ -1971,6 +2027,7 @@ Como posso ajudar hoje?`
         conversationId,
         {
           ...attrs,
+
           ia_etapa:
             "nome",
         }
@@ -1978,6 +2035,7 @@ Como posso ajudar hoje?`
 
       await sendMessage(
         conversationId,
+
         "Olá novamente! Para retomarmos seu atendimento, me informe seu nome completo."
       );
 
@@ -1992,6 +2050,7 @@ Como posso ajudar hoje?`
         conversationId,
         {
           ...attrs,
+
           ia_etapa:
             "cidade",
         }
@@ -1999,6 +2058,7 @@ Como posso ajudar hoje?`
 
       await sendMessage(
         conversationId,
+
         `${firstName(
           attrs.ia_nome
         )}, que bom falar com você novamente 😊
@@ -2069,39 +2129,62 @@ Me informe a cidade relacionada ao atendimento, por favor.`
       );
 
     if (!direct) {
-      return routeCustomerNeed(
+      await sendMessage(
         conversationId,
-        attrs,
-        text
+
+        `${firstName(
+          attrs.ia_nome
+        ) || "Olá"}, escolha uma das opções de 1 a 6 para eu direcionar seu atendimento:
+
+1. Atendimento
+2. Comercial
+3. Financeiro
+4. Projetos
+5. Topografia
+6. Pós-Protocolo`
       );
+
+      return {
+        stage:
+          "setor",
+      };
     }
+
+    const nextAttrs = {
+      ...attrs,
+
+      ia_setor:
+        direct,
+
+      ia_etapa:
+        "motivo",
+
+      ia_atendimento_concluido:
+        false,
+
+      ia_tentativas_esclarecimento:
+        0,
+    };
 
     await updateConversationAttributes(
       conversationId,
-      {
-        ...attrs,
-
-        ia_setor:
-          direct,
-
-        ia_etapa:
-          "motivo",
-
-        ia_atendimento_concluido:
-          false,
-      }
+      nextAttrs
     );
 
     await sendMessage(
       conversationId,
+
       `${firstName(
         attrs.ia_nome
-      )}, certo. Me conte brevemente o que você precisa em relação ao setor de ${direct}.`
+      )}, certo. Me conte brevemente o que você deseja tratar com o setor de ${direct}.`
     );
 
     return {
       stage:
         "motivo",
+
+      sector:
+        direct,
     };
   }
 
@@ -2122,6 +2205,7 @@ Me informe a cidade relacionada ao atendimento, por favor.`
     ) {
       await sendMessage(
         conversationId,
+
         `${firstName(
           attrs.ia_nome
         )}, pode me explicar brevemente o que você precisa?`
@@ -2133,10 +2217,28 @@ Me informe a cidade relacionada ao atendimento, por favor.`
       };
     }
 
+    /*
+    MUITO IMPORTANTE:
+
+    Aqui o cliente já escolheu o setor.
+
+    Portanto, se ele disser:
+    "quero falar sobre o andamento do processo"
+
+    NÃO mostramos o andamento novamente.
+
+    Agora essa mensagem é o MOTIVO
+    que será analisado para encaminhamento.
+    */
+
     return routeCustomerNeed(
       conversationId,
       attrs,
-      text
+      text,
+      {
+        allowProgress:
+          false,
+      }
     );
   }
 
@@ -2161,6 +2263,7 @@ Me informe a cidade relacionada ao atendimento, por favor.`
 
   await sendMessage(
     conversationId,
+
     `${firstName(
       attrs.ia_nome
     ) || "Olá"}, como posso ajudar você?`
