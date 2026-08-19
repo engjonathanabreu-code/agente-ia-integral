@@ -1,0 +1,28 @@
+name: Cutucada por inatividade (Agente IA)
+
+# Verifica a cada 10 minutos se há conversas
+# encaminhadas para um atendente humano com
+# 30+ minutos sem resposta, e envia os avisos
+# definidos em api/nudge-check.js.
+#
+# Usamos GitHub Actions (em vez de Vercel Cron)
+# porque o Vercel Cron, no plano gratuito
+# (Hobby), só permite agendamentos de 1x por dia
+# — insuficiente para uma regra de 30 minutos.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  nudge-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar endpoint de verificação
+        run: |
+          curl --fail --silent --show-error \
+            "${AGENT_BASE_URL}/api/nudge-check?token=${NUDGE_CRON_TOKEN}"
+        env:
+          AGENT_BASE_URL: ${{ secrets.AGENT_BASE_URL }}
+          NUDGE_CRON_TOKEN: ${{ secrets.NUDGE_CRON_TOKEN }}

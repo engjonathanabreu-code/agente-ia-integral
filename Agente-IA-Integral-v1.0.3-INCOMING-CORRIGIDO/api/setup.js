@@ -51,6 +51,20 @@ const attributes = [
       "Indica se o atendimento inicial já foi encaminhado.",
     type: 7,
   },
+
+  {
+    key: "ia_ultima_cutucada_em",
+    name: "IA — Última cutucada",
+    description:
+      "Data/hora (ISO) do último aviso de paciência enviado por inatividade de atendente humano.",
+  },
+
+  {
+    key: "ia_fim_expediente_avisado_em",
+    name: "IA — Aviso de fim de expediente",
+    description:
+      "Data (YYYY-MM-DD) em que o aviso de fim de expediente já foi enviado, para não repetir no mesmo dia.",
+  },
 ];
 
 

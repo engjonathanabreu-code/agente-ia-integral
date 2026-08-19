@@ -111,6 +111,21 @@ export async function getConversation(
 }
 
 
+export async function listConversations({
+  status = "open",
+  page = 1,
+} = {}) {
+  const params = new URLSearchParams({
+    status,
+    page: String(page),
+  });
+
+  return cwFetch(
+    `/api/v1/accounts/${accountId()}/conversations?${params.toString()}`
+  );
+}
+
+
 export async function sendMessage(
   conversationId,
   content

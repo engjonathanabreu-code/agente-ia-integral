@@ -66,6 +66,10 @@ APP_URL=https://seu-projeto.vercel.app
 AI_ENABLED=true
 ```
 
+# Cutucada por inatividade (opcional, ver seção v1.0.4)
+NUDGE_CRON_TOKEN=
+
+
 ### CHATWOOT_API_TOKEN
 
 Use um token de acesso de um administrador do Chatwoot com permissão para:
@@ -126,3 +130,38 @@ O webhook agora usa token no caminho (`/api/webhook/<token>`) em vez de query st
 
 ## v1.0.3
 Corrigido o reconhecimento de mensagens recebidas do Chatwoot: aceita `message_type` como `incoming`, `0` ou `"0"`. Adicionados logs de diagnóstico do webhook.
+
+
+## v1.0.4
+Nova regra de cutucada por inatividade: se uma conversa já encaminhada
+para um atendente humano ficar 30+ minutos sem resposta de um humano,
+a IA envia um aviso pedindo paciência (fluxo alto de atendimentos) e
+repete a cada 30 minutos enquanto durar o horário comercial (Seg a
+Sex, 08h-18h, fuso America/Sao_Paulo). Ao final do expediente, se
+ainda não houver resposta, envia uma única mensagem de desculpas
+avisando que o atendimento será agilizado no dia seguinte.
+
+Como funciona:
+- `api/nudge-check.js`: endpoint protegido por `NUDGE_CRON_TOKEN`
+  (`GET /api/nudge-check?token=...`). Varre as conversas `open`/
+  `pending` encaminhadas para humano (`ia_atendimento_concluido` ou
+  `ia_etapa=encaminhado`), calcula o tempo desde a última mensagem do
+  cliente sem resposta humana, e envia os avisos conforme a regra
+  acima. Mensagens enviadas pela própria IA são identificadas por
+  `content_attributes.integral_ai` e não contam como resposta humana.
+- `lib/businessHours.js`: define o horário comercial (Seg-Sex, 08h-18h,
+  America/Sao_Paulo) usado pela regra.
+- Novos atributos de conversa (criados pelo `/api/setup`):
+  `ia_ultima_cutucada_em` e `ia_fim_expediente_avisado_em`.
+
+Disparo periódico: como o plano gratuito da Vercel só permite Cron
+Jobs uma vez por dia, o disparo é feito por um GitHub Actions
+(`.github/workflows/nudge-cron.yml`) a cada 10 minutos, chamando o
+endpoint acima. É necessário configurar dois **secrets** no repositório
+do GitHub (Settings → Secrets and variables → Actions):
+
+- `AGENT_BASE_URL`: URL de produção do agente (ex.: `https://agente-ia-integral.vercel.app`)
+- `NUDGE_CRON_TOKEN`: o mesmo valor configurado na variável de ambiente `NUDGE_CRON_TOKEN` da Vercel
+
+Depois de configurar, rode `/api/setup` novamente (idempotente) para
+criar os dois novos atributos de conversa no Chatwoot.
