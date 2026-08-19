@@ -572,6 +572,89 @@ VALIDAÇÃO DE NOME
 ===========================================
 */
 
+const CONVERSATIONAL_WORDS = [
+  "pode",
+  "poderia",
+  "poderiam",
+  "consegue",
+  "conseguem",
+  "encaminhar",
+  "enviar",
+  "envie",
+  "manda",
+  "mandar",
+  "contato",
+  "favor",
+  "voce",
+  "voces",
+  "obrigado",
+  "obrigada",
+  "desculpa",
+  "desculpe",
+  "preciso",
+  "precisava",
+  "gostaria",
+  "queria",
+  "quero",
+  "numero",
+  "whatsapp",
+  "atendente",
+  "alguem",
+  "email",
+  "telefone",
+  "ligar",
+  "chamar",
+  "ajuda",
+  "ajudar",
+  "urgente",
+  "obrigado(a)",
+];
+
+const GREETING_STARTERS = [
+  "oi",
+  "ola",
+  "bom dia",
+  "boa tarde",
+  "boa noite",
+  "opa",
+  "e ai",
+  "tudo bem",
+  "como vai",
+];
+
+function startsWithGreeting(value) {
+  const norm = normalizeText(value);
+
+  return GREETING_STARTERS.some(
+    (greeting) => {
+      const normGreeting =
+        normalizeText(greeting);
+
+      return (
+        norm === normGreeting ||
+        norm.startsWith(
+          `${normGreeting} `
+        )
+      );
+    }
+  );
+}
+
+function containsConversationalWord(
+  value
+) {
+  const words =
+    normalizeText(value)
+      .split(" ")
+      .filter(Boolean);
+
+  return words.some((word) =>
+    CONVERSATIONAL_WORDS.includes(
+      word
+    )
+  );
+}
+
 function validFullName(value) {
   const clean =
     String(value || "")
@@ -585,11 +668,14 @@ function validFullName(value) {
     return false;
   }
 
-  if (
+  const words =
     clean
       .split(" ")
-      .filter(Boolean)
-      .length < 2
+      .filter(Boolean);
+
+  if (
+    words.length < 2 ||
+    words.length > 6
   ) {
     return false;
   }
@@ -598,9 +684,30 @@ function validFullName(value) {
     return false;
   }
 
-  return /^[A-Za-zÀ-ÿ'’\-\s]+$/.test(
+  if (!/^[A-Za-zÀ-ÿ'’\-\s]+$/.test(
     clean
-  );
+  )) {
+    return false;
+  }
+
+  /*
+  Estrutura de "duas ou mais palavras
+  só com letras" também combina com
+  frases de conversa comuns (ex.:
+  "Olá boa tarde", "Bom dia obrigado").
+  Rejeita esses casos explicitamente
+  em vez de aceitar como nome.
+  */
+
+  if (startsWithGreeting(clean)) {
+    return false;
+  }
+
+  if (containsConversationalWord(clean)) {
+    return false;
+  }
+
+  return true;
 }
 
 /*
@@ -658,9 +765,38 @@ function validCity(value) {
     return false;
   }
 
-  return /^[A-Za-zÀ-ÿ'’\-\s]+$/.test(
+  if (!/^[A-Za-zÀ-ÿ'’\-\s]+$/.test(
     clean
-  );
+  )) {
+    return false;
+  }
+
+  /*
+  Nome de cidade real dificilmente passa
+  de 5 palavras e não contém verbos/termos
+  de conversa (ex.: "pode me encaminhar o
+  contato pf" já apareceu registrado como
+  cidade por engano). Rejeita esses casos.
+  */
+
+  const words =
+    text
+      .split(" ")
+      .filter(Boolean);
+
+  if (words.length > 5) {
+    return false;
+  }
+
+  if (startsWithGreeting(clean)) {
+    return false;
+  }
+
+  if (containsConversationalWord(clean)) {
+    return false;
+  }
+
+  return true;
 }
 
 /*
