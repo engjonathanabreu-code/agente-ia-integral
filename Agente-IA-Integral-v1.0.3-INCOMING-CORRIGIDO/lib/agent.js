@@ -1705,6 +1705,47 @@ export async function handleIncomingMessage(
     );
   }
 
+  const conversation =
+    await getConversation(
+      conversationId
+    );
+
+  const attrs =
+    conversation?.custom_attributes ||
+    {};
+
+  const stage =
+    attrs.ia_etapa ||
+    "inicio";
+
+  /*
+  ===========================================
+  HUMANO JÁ ASSUMIU
+  ===========================================
+
+  Precisa ser a PRIMEIRA verificação, antes de
+  tentar interpretar o conteúdo da mensagem.
+  Caso contrário, uma mensagem sem texto (ex.:
+  cliente manda só uma foto/anexo, sem legenda,
+  depois que já foi encaminhado para um agente
+  humano) fazia a IA responder "não consegui
+  interpretar essa mensagem" mesmo já estando
+  fora da conversa.
+  */
+
+  if (
+    attrs.ia_atendimento_concluido ===
+      true ||
+    stage ===
+      "encaminhado"
+  ) {
+    return {
+      ignored: true,
+      reason:
+        "human_handoff_active",
+    };
+  }
+
   const extracted =
     await extractCustomerText(
       payload
@@ -1727,19 +1768,6 @@ export async function handleIncomingMessage(
     };
   }
 
-  const conversation =
-    await getConversation(
-      conversationId
-    );
-
-  const attrs =
-    conversation?.custom_attributes ||
-    {};
-
-  const stage =
-    attrs.ia_etapa ||
-    "inicio";
-
   console.log(
     "Agente IA processando mensagem",
     {
@@ -1757,25 +1785,6 @@ export async function handleIncomingMessage(
       text,
     }
   );
-
-  /*
-  ===========================================
-  HUMANO JÁ ASSUMIU
-  ===========================================
-  */
-
-  if (
-    attrs.ia_atendimento_concluido ===
-      true ||
-    stage ===
-      "encaminhado"
-  ) {
-    return {
-      ignored: true,
-      reason:
-        "human_handoff_active",
-    };
-  }
 
   /*
   ===========================================
