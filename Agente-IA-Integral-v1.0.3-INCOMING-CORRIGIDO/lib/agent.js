@@ -1760,22 +1760,26 @@ No WhatsApp Business (Meta), para falar com
 um número que ainda não tem uma janela de 24h
 aberta, é preciso mandar antes uma mensagem de
 template pré-aprovada pela Meta. Quando um
-atendente humano manda essa mensagem inicial
-(ou a conversa já nasce atribuída a um
-agente/equipe), a resposta do cliente não deve
-cair na triagem da IA (nome/cidade/setor) do
-zero — ela precisa continuar com quem já
-iniciou o contato.
+atendente humano manda essa mensagem inicial,
+a resposta do cliente não deve cair na
+triagem da IA (nome/cidade/setor) do zero —
+ela precisa continuar com quem já iniciou o
+contato.
 
-Detectamos isso de duas formas (qualquer uma
-já é suficiente):
-- a primeira mensagem da conversa é uma
-  mensagem NOSSA (outgoing) que não foi
-  enviada pela própria IA (sem
-  content_attributes.integral_ai) — ou seja,
-  um humano escreveu primeiro;
-- a conversa já nasce com um agente ou equipe
-  atribuído (meta.assignee / meta.team).
+Único sinal confiável: a primeira mensagem da
+conversa é uma mensagem NOSSA (outgoing) que
+não foi enviada pela própria IA (sem
+content_attributes.integral_ai) — ou seja, um
+humano escreveu primeiro.
+
+NÃO usamos "a conversa já tem agente/equipe
+atribuído" como sinal: contas com política de
+atribuição automática (ex.: "Default Policy"
+round-robin do Chatwoot) atribuem um agente
+assim que a conversa é criada, mesmo quando
+foi o CLIENTE quem escreveu primeiro — isso
+gerava falso positivo e fazia a IA pular a
+triagem em conversas totalmente orgânicas.
 */
 
 function wasStartedByHumanAgent(conversation) {
@@ -1789,18 +1793,11 @@ function wasStartedByHumanAgent(conversation) {
 
   const firstMessage = messages[0];
 
-  const firstMessageIsHumanOutgoing = Boolean(
+  return Boolean(
     firstMessage &&
       firstMessage.message_type === 1 &&
       !firstMessage?.content_attributes?.integral_ai
   );
-
-  const hasHumanOwner = Boolean(
-    conversation?.meta?.assignee?.id ||
-      conversation?.meta?.team?.id
-  );
-
-  return firstMessageIsHumanOutgoing || hasHumanOwner;
 }
 
 

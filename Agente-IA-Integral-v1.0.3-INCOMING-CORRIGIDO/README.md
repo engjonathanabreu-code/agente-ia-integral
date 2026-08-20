@@ -189,20 +189,29 @@ Resposta a mensagem de template (Meta) iniciada por um agente humano
 não cai mais na triagem da IA. No WhatsApp Business, para falar com
 um número sem janela de 24h aberta é preciso mandar antes uma
 mensagem de template pré-aprovada pela Meta. Quando um atendente
-manda essa mensagem inicial (ou a conversa já nasce atribuída a um
-agente/equipe), a primeira resposta do cliente agora é reconhecida
-como continuação do atendimento desse agente — não como um contato
-novo — e não dispara mais o fluxo de nome/cidade/setor da IA.
+manda essa mensagem inicial, a primeira resposta do cliente agora é
+reconhecida como continuação do atendimento desse agente — não como
+um contato novo — e não dispara mais o fluxo de nome/cidade/setor
+da IA.
 
 Detecção (`wasStartedByHumanAgent()` em `lib/agent.js`), usada só
 quando a conversa ainda está no estágio "inicio" (a IA nunca
-processou nada nela):
-- a primeira mensagem da conversa é uma mensagem nossa (outgoing) que
-  não foi enviada pela própria IA (sem `content_attributes.integral_ai`);
-- ou a conversa já nasce com um agente/equipe atribuído (`meta.assignee`
-  ou `meta.team`).
+processou nada nela): a primeira mensagem da conversa é uma mensagem
+nossa (outgoing) que não foi enviada pela própria IA (sem
+`content_attributes.integral_ai`).
 
 Quando detectado, a conversa é marcada com `ia_etapa=encaminhado` e
 `ia_atendimento_concluido=true` (os mesmos atributos usados para um
 handoff normal da IA), então ela também passa a valer para a regra de
 cutucada por inatividade (v1.0.4) se o agente demorar para responder.
+
+**Correção (mesmo dia):** a primeira versão também considerava "a
+conversa já nasce com agente/equipe atribuído" (`meta.assignee` /
+`meta.team`) como sinal de início humano. Isso gerou falso positivo
+em contas com política de atribuição automática (ex.: "Default
+Policy" round-robin do Chatwoot), que atribui um agente assim que a
+conversa é criada — mesmo quando foi o CLIENTE quem escreveu
+primeiro. Nesses casos a IA pulava a triagem indevidamente e o
+agente tinha que perguntar nome/cidade manualmente. Esse sinal foi
+removido; agora só conta a primeira mensagem da conversa ser
+outgoing e não vir da IA.
