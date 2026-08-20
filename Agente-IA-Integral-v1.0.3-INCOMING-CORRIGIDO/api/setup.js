@@ -746,47 +746,50 @@ export default async function handler(
 
         /*
         Se ainda assim não encontrou,
-        NÃO tenta criar novamente.
+        NÃO tenta criar de novo (evitaria
+        um segundo 422 em loop).
 
-        Retorna diagnóstico completo.
+        O próprio erro 422 "Url has already
+        been taken" já É a confirmação de que
+        o Chatwoot tem, sim, um webhook
+        cadastrado com essa URL exata — ele
+        simplesmente não aparece na listagem
+        (`GET /webhooks`) para o token atual,
+        provavelmente por escopo/permissão do
+        CHATWOOT_API_TOKEN. Em vez de falhar o
+        setup inteiro por causa disso, seguimos
+        como sucesso "não confirmado": a URL
+        está registrada, mas não conseguimos
+        checar por aqui se as subscriptions
+        (message_created, conversation_status_changed
+        etc.) estão corretas nesse webhook
+        existente — isso precisa ser conferido
+        manualmente uma vez em Chatwoot →
+        Configurações → Integrações → Webhooks.
         */
 
         if (!duplicateWebhook) {
 
-          return json(
-            res,
-            409,
+          console.warn(
+            "Webhook não encontrado na listagem mesmo após 422, mas a URL já está registrada no Chatwoot. Seguindo como sucesso não confirmado.",
             {
-              ok: false,
-
-              error:
-                "A URL do webhook já existe no Chatwoot, mas o webhook correspondente não apareceu na listagem da API.",
-
               expected_webhook_url:
                 webhookUrl,
 
               webhooks_found:
-                refreshedList.map(
-                  (item) => ({
-                    id:
-                      item?.id,
-
-                    name:
-                      item?.name,
-
-                    url:
-                      item?.url,
-
-                    subscriptions:
-                      item?.subscriptions,
-                  })
-                ),
-
-              instruction:
-                "Envie esta resposta completa para diagnóstico. Não execute /api/setup novamente até corrigirmos o webhook.",
+                refreshedList.length,
             }
           );
-        }
+
+
+          webhookAction =
+            "already_registered_unlistable";
+
+          webhookMatchMethod =
+            "duplicate_error_confirmed";
+
+          webhook = null;
+        } else {
 
 
         /*
@@ -805,6 +808,7 @@ export default async function handler(
 
         webhookAction =
           "updated_after_duplicate";
+        }
       }
     }
 
@@ -844,6 +848,15 @@ export default async function handler(
     ============================================
     */
 
+    const nextInstruction =
+      webhookAction ===
+      "already_registered_unlistable"
+        ? "A URL do webhook já estava registrada no Chatwoot (confirmado pelo erro de duplicidade), mas o token atual não consegue listar webhooks para checar as subscriptions automaticamente. Confira manualmente uma vez em Chatwoot -> Configurações -> Integrações -> Webhooks se o webhook aponta para " +
+          webhookUrl +
+          " e se as subscriptions incluem message_created e conversation_status_changed. Depois resolva uma conversa encaminhada e envie uma nova mensagem do cliente para testar a retomada automática."
+        : "Verifique se subscriptions contém message_created e conversation_status_changed. Depois resolva uma conversa encaminhada e envie uma nova mensagem do cliente para testar a retomada automática.";
+
+
     return json(
       res,
       200,
@@ -854,7 +867,7 @@ export default async function handler(
           "Agente IA Integral",
 
         version:
-          "1.0.4-retorno-automatico",
+          "1.0.5-cutucada-inatividade",
 
         attributes: {
           existing:
@@ -918,7 +931,7 @@ export default async function handler(
         },
 
         next:
-          "Verifique se subscriptions contém message_created e conversation_status_changed. Depois resolva uma conversa encaminhada e envie uma nova mensagem do cliente para testar a retomada automática.",
+          nextInstruction,
       }
     );
 
