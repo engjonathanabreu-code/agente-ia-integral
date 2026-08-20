@@ -182,3 +182,27 @@ do GitHub (Settings → Secrets and variables → Actions):
 
 Depois de configurar, rode `/api/setup` novamente (idempotente) para
 criar os dois novos atributos de conversa no Chatwoot.
+
+
+## v1.0.6
+Resposta a mensagem de template (Meta) iniciada por um agente humano
+não cai mais na triagem da IA. No WhatsApp Business, para falar com
+um número sem janela de 24h aberta é preciso mandar antes uma
+mensagem de template pré-aprovada pela Meta. Quando um atendente
+manda essa mensagem inicial (ou a conversa já nasce atribuída a um
+agente/equipe), a primeira resposta do cliente agora é reconhecida
+como continuação do atendimento desse agente — não como um contato
+novo — e não dispara mais o fluxo de nome/cidade/setor da IA.
+
+Detecção (`wasStartedByHumanAgent()` em `lib/agent.js`), usada só
+quando a conversa ainda está no estágio "inicio" (a IA nunca
+processou nada nela):
+- a primeira mensagem da conversa é uma mensagem nossa (outgoing) que
+  não foi enviada pela própria IA (sem `content_attributes.integral_ai`);
+- ou a conversa já nasce com um agente/equipe atribuído (`meta.assignee`
+  ou `meta.team`).
+
+Quando detectado, a conversa é marcada com `ia_etapa=encaminhado` e
+`ia_atendimento_concluido=true` (os mesmos atributos usados para um
+handoff normal da IA), então ela também passa a valer para a regra de
+cutucada por inatividade (v1.0.4) se o agente demorar para responder.

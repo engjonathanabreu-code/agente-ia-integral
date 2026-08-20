@@ -1751,6 +1751,59 @@ CONVERSA RESOLVIDA
 ===========================================
 */
 
+/*
+===========================================
+CONVERSA INICIADA POR UM AGENTE HUMANO
+===========================================
+
+No WhatsApp Business (Meta), para falar com
+um número que ainda não tem uma janela de 24h
+aberta, é preciso mandar antes uma mensagem de
+template pré-aprovada pela Meta. Quando um
+atendente humano manda essa mensagem inicial
+(ou a conversa já nasce atribuída a um
+agente/equipe), a resposta do cliente não deve
+cair na triagem da IA (nome/cidade/setor) do
+zero — ela precisa continuar com quem já
+iniciou o contato.
+
+Detectamos isso de duas formas (qualquer uma
+já é suficiente):
+- a primeira mensagem da conversa é uma
+  mensagem NOSSA (outgoing) que não foi
+  enviada pela própria IA (sem
+  content_attributes.integral_ai) — ou seja,
+  um humano escreveu primeiro;
+- a conversa já nasce com um agente ou equipe
+  atribuído (meta.assignee / meta.team).
+*/
+
+function wasStartedByHumanAgent(conversation) {
+  const messages = Array.isArray(conversation?.messages)
+    ? [...conversation.messages]
+    : [];
+
+  messages.sort(
+    (a, b) => (a.created_at || 0) - (b.created_at || 0)
+  );
+
+  const firstMessage = messages[0];
+
+  const firstMessageIsHumanOutgoing = Boolean(
+    firstMessage &&
+      firstMessage.message_type === 1 &&
+      !firstMessage?.content_attributes?.integral_ai
+  );
+
+  const hasHumanOwner = Boolean(
+    conversation?.meta?.assignee?.id ||
+      conversation?.meta?.team?.id
+  );
+
+  return firstMessageIsHumanOutgoing || hasHumanOwner;
+}
+
+
 export async function handleConversationStatusChanged(
   payload
 ) {
@@ -1879,6 +1932,40 @@ export async function handleIncomingMessage(
       ignored: true,
       reason:
         "human_handoff_active",
+    };
+  }
+
+  /*
+  ===========================================
+  CONVERSA INICIADA POR UM AGENTE HUMANO
+  ===========================================
+
+  Só faz sentido checar isso no "inicio": se a
+  IA já tinha avançado de estágio antes, foi
+  ela quem começou a conversa, não um humano.
+  */
+
+  if (
+    stage === "inicio" &&
+    wasStartedByHumanAgent(conversation)
+  ) {
+    await updateConversationAttributes(
+      conversationId,
+      {
+        ...attrs,
+
+        ia_etapa:
+          "encaminhado",
+
+        ia_atendimento_concluido:
+          true,
+      }
+    );
+
+    return {
+      ignored: true,
+      reason:
+        "started_by_human_agent",
     };
   }
 
