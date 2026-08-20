@@ -13,10 +13,20 @@ import { getScheduleState } from "../lib/businessHours.js";
 REGRA DE INATIVIDADE — 30 MINUTOS
 ============================================
 
-Se uma conversa já foi encaminhada para um
-atendente humano (ia_atendimento_concluido)
-e o cliente fica 30+ minutos sem resposta de
-um humano, a IA:
+Só entra em ação quando TODAS as condições
+abaixo forem verdadeiras:
+
+- a conversa está com status "open" (aberta,
+  não resolvida);
+- a conversa já foi encaminhada para um
+  atendente/equipe humana (não está mais
+  "presa" no fluxo do agente IA);
+- a ÚLTIMA mensagem da conversa é do cliente
+  — se a última mensagem foi enviada por nós
+  (humano ou a própria IA), a regra não dispara.
+
+Quando essas condições valem e o cliente fica
+30+ minutos sem resposta de um humano, a IA:
 
 1. Durante o horário comercial (Seg a Sex,
    08h-18h): envia um aviso pedindo paciência
@@ -100,6 +110,34 @@ function wasHandedOffToHuman(conversation) {
 
 
 /*
+Conversa precisa estar de fato com um time ou
+agente humano — não apenas ter passado pelo
+fluxo da IA em algum momento. Se não há equipe
+nem agente atribuído, ela ainda está "parada"
+no agente IA e não deve receber cutucada.
+*/
+
+function hasHumanOwner(conversation) {
+  return Boolean(
+    conversation?.meta?.team?.id ||
+      conversation?.team?.id ||
+      conversation?.meta?.assignee?.id ||
+      conversation?.assignee?.id
+  );
+}
+
+
+/*
+A conversa precisa estar aberta (não resolvida,
+não parada/snoozed).
+*/
+
+function isOpenConversation(conversation) {
+  return conversation?.status === "open";
+}
+
+
+/*
 Busca todas as conversas de um status,
 paginando quando necessário.
 */
@@ -132,6 +170,15 @@ async function processConversation(conversationSummary, scheduleState) {
 
   const conversation = await getConversation(conversationSummary.id);
   const attrs = conversation?.custom_attributes || {};
+
+  /*
+  Confirma no objeto completo da conversa (não
+  só no resumo da listagem) que ela está aberta
+  e realmente com um time/agente humano.
+  */
+
+  if (!isOpenConversation(conversation)) return null;
+  if (!hasHumanOwner(conversation)) return null;
 
   const messages = Array.isArray(conversation?.messages)
     ? [...conversation.messages]
@@ -250,15 +297,13 @@ export default async function handler(req, res) {
   try {
     const scheduleState = getScheduleState(new Date());
 
-    const [openConversations, pendingConversations] = await Promise.all([
-      fetchAllConversations("open"),
-      fetchAllConversations("pending"),
-    ]);
+    /*
+    Só nos interessam conversas "open" (abertas,
+    não resolvidas). "pending"/"snoozed" ficam
+    de fora da regra.
+    */
 
-    const conversations = [
-      ...openConversations,
-      ...pendingConversations,
-    ];
+    const conversations = await fetchAllConversations("open");
 
     const results = [];
     const errors = [];

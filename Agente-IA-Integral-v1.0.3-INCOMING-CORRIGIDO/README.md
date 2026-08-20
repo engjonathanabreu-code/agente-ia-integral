@@ -141,14 +141,24 @@ Sex, 08h-18h, fuso America/Sao_Paulo). Ao final do expediente, se
 ainda não houver resposta, envia uma única mensagem de desculpas
 avisando que o atendimento será agilizado no dia seguinte.
 
+A regra só dispara quando TODAS as condições valem:
+- a conversa está com status `open` (aberta, não resolvida);
+- ela está de fato com um time/agente humano (`meta.team` ou
+  `meta.assignee` preenchido) — se ainda estiver só no fluxo do
+  agente IA, sem handoff, não conta;
+- a ÚLTIMA mensagem da conversa é do cliente — se a última mensagem
+  foi enviada por nós (atendente humano ou a própria IA), a regra
+  não dispara.
+
 Como funciona:
 - `api/nudge-check.js`: endpoint protegido por `NUDGE_CRON_TOKEN`
-  (`GET /api/nudge-check?token=...`). Varre as conversas `open`/
-  `pending` encaminhadas para humano (`ia_atendimento_concluido` ou
-  `ia_etapa=encaminhado`), calcula o tempo desde a última mensagem do
-  cliente sem resposta humana, e envia os avisos conforme a regra
-  acima. Mensagens enviadas pela própria IA são identificadas por
-  `content_attributes.integral_ai` e não contam como resposta humana.
+  (`GET /api/nudge-check?token=...`). Varre as conversas `open`
+  encaminhadas para humano (`ia_atendimento_concluido` ou
+  `ia_etapa=encaminhado`), confirma que há time/agente atribuído e
+  que a última mensagem é do cliente, calcula o tempo de espera, e
+  envia os avisos conforme a regra acima. Mensagens enviadas pela
+  própria IA são identificadas por `content_attributes.integral_ai`
+  e não contam como resposta humana.
 - `lib/businessHours.js`: define o horário comercial (Seg-Sex, 08h-18h,
   America/Sao_Paulo) usado pela regra.
 - Novos atributos de conversa (criados pelo `/api/setup`):
