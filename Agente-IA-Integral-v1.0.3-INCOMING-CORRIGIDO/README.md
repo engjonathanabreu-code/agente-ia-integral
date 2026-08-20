@@ -135,11 +135,17 @@ Corrigido o reconhecimento de mensagens recebidas do Chatwoot: aceita `message_t
 ## v1.0.4
 Nova regra de cutucada por inatividade: se uma conversa já encaminhada
 para um atendente humano ficar 30+ minutos sem resposta de um humano,
-a IA envia um aviso pedindo paciência (fluxo alto de atendimentos) e
-repete a cada 30 minutos enquanto durar o horário comercial (Seg a
-Sex, 08h-18h, fuso America/Sao_Paulo). Ao final do expediente, se
-ainda não houver resposta, envia uma única mensagem de desculpas
-avisando que o atendimento será agilizado no dia seguinte.
+a IA envia um aviso pedindo desculpas pela demora (alto volume de
+atendimentos) e repete a cada 2 horas enquanto durar o horário
+comercial (Seg a Sex, 08h-18h, fuso America/Sao_Paulo). Ao final do
+expediente, se ainda não houver resposta, envia uma única mensagem de
+desculpas avisando que o atendimento será agilizado no dia seguinte.
+
+O texto do aviso recorrente varia a cada envio — várias redações
+diferentes, sempre com o mesmo propósito (alto volume + desculpas
+pela demora) e sempre com um emoji para suavizar o tom — para não
+soar repetitivo em conversas mais longas. A mensagem de fim de
+expediente é única e não muda.
 
 A regra só dispara quando TODAS as condições valem:
 - a conversa está com status `open` (aberta, não resolvida);
@@ -156,7 +162,8 @@ Como funciona:
   encaminhadas para humano (`ia_atendimento_concluido` ou
   `ia_etapa=encaminhado`), confirma que há time/agente atribuído e
   que a última mensagem é do cliente, calcula o tempo de espera, e
-  envia os avisos conforme a regra acima. Mensagens enviadas pela
+  envia os avisos conforme a regra acima (escolhendo aleatoriamente
+  uma das redações do aviso recorrente). Mensagens enviadas pela
   própria IA são identificadas por `content_attributes.integral_ai`
   e não contam como resposta humana.
 - `lib/businessHours.js`: define o horário comercial (Seg-Sex, 08h-18h,

@@ -10,7 +10,7 @@ import { getScheduleState } from "../lib/businessHours.js";
 
 /*
 ============================================
-REGRA DE INATIVIDADE — 30 MINUTOS
+REGRA DE INATIVIDADE
 ============================================
 
 Só entra em ação quando TODAS as condições
@@ -29,10 +29,14 @@ Quando essas condições valem e o cliente fica
 30+ minutos sem resposta de um humano, a IA:
 
 1. Durante o horário comercial (Seg a Sex,
-   08h-18h): envia um aviso pedindo paciência
-   por causa do fluxo de atendimentos, e
-   repete a cada 30 minutos enquanto o
-   cliente continuar sem resposta.
+   08h-18h): envia um aviso pedindo desculpas
+   pela demora e explicando o alto volume de
+   atendimentos, e repete a cada 2 horas
+   (sempre dentro do horário comercial)
+   enquanto o cliente continuar sem resposta.
+   O texto varia a cada envio (mesmo propósito,
+   redação diferente, sempre com um emoji para
+   suavizar o tom) para não soar repetitivo.
 
 2. Ao final do expediente (mesmo dia útil,
    após as 18h): envia, uma única vez, um
@@ -46,10 +50,28 @@ válido.
 */
 
 const NUDGE_THRESHOLD_MS = 30 * 60 * 1000;
-const NUDGE_INTERVAL_MS = 30 * 60 * 1000;
+const NUDGE_INTERVAL_MS = 2 * 60 * 60 * 1000;
 
-const NUDGE_MESSAGE =
-  "Olá! Estamos com um grande fluxo de atendimentos no momento e pedimos a sua paciência — em breve um de nossos atendentes continua a sua conversa. Obrigado por aguardar! 🙏";
+/*
+Várias redações para o mesmo aviso (alto
+volume de atendimentos + desculpas pela
+demora + emoji para suavizar o tom). Uma é
+escolhida aleatoriamente a cada envio para
+não repetir sempre o mesmo texto.
+*/
+
+const NUDGE_MESSAGES = [
+  "Olá! Estamos com uma grande demanda de atendimentos no momento e pedimos desculpas pela demora — em breve um de nossos atendentes continua a sua conversa. Obrigado pela paciência! 🙏",
+  "Oi! Nosso volume de atendimentos está bem alto agora e isso está atrasando as respostas. Pedimos desculpas pela espera, sua conversa não foi esquecida e em breve alguém da equipe continua com você. 😊",
+  "Olá! Sabemos que a espera está longa — estamos com muitas solicitações no momento e pedimos desculpas pelo atraso. Só mais um pouquinho, já já continuamos o seu atendimento! 🙏",
+  "Oi! Pedimos desculpas pela demora na resposta: estamos com um volume alto de atendimentos hoje. Em instantes um atendente dá continuidade ao seu caso. Obrigado por aguardar! 🙏",
+];
+
+function pickNudgeMessage() {
+  const index = Math.floor(Math.random() * NUDGE_MESSAGES.length);
+
+  return NUDGE_MESSAGES[index];
+}
 
 const END_OF_DAY_MESSAGE =
   "Encerramos o nosso horário de atendimento por hoje e pedimos desculpas por não termos concluído o seu atendimento. Estamos com um grande fluxo de clientes, mas amanhã vamos agilizar e dar continuidade à sua conversa assim que possível. Obrigado pela compreensão!";
@@ -238,7 +260,7 @@ async function processConversation(conversationSummary, scheduleState) {
 
     if (Date.now() - lastNudgeAt < NUDGE_INTERVAL_MS) return null;
 
-    await sendMessage(conversation.id, NUDGE_MESSAGE);
+    await sendMessage(conversation.id, pickNudgeMessage());
 
     await updateConversationAttributes(conversation.id, {
       ia_ultima_cutucada_em: new Date().toISOString(),
