@@ -1,0 +1,49 @@
+name: Fix progress routing once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-progress-routing-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch agent progress routing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('Agente-IA-Integral-v1.0.3-INCOMING-CORRIGIDO/lib/agent.js')
+          s = p.read_text()
+
+          old_terms = '''    "andamento",\n    "andamentos",\n    "status do processo",'''
+          new_terms = '''    "andamento",\n    "andamentos",\n    "ver do meu processo",\n    "ver meu processo",\n    "ver o meu processo",\n    "quero ver meu processo",\n    "quero ver o meu processo",\n    "quero ver do meu processo",\n    "saber do meu processo",\n    "saber sobre meu processo",\n    "consultar meu processo",\n    "consultar o meu processo",\n    "acompanhar meu processo",\n    "acompanhar o meu processo",\n    "status do processo",'''
+          if old_terms not in s:
+              raise SystemExit('Bloco de termos de andamento nao encontrado')
+          s = s.replace(old_terms, new_terms, 1)
+
+          old_error = '''  if (\n    !result ||\n    result.ok === false\n  ) {\n    return null;\n  }\n\n  if (result.found === false) {\n    return null;\n  }'''
+          new_error = '''  if (\n    !result ||\n    result.ok === false\n  ) {\n    return {\n      handled: false,\n      forceHandoff: true,\n      reason: "progress_lookup_failed",\n      handoffMessage:\n        `${firstName(attrs?.ia_nome) || "Olá"}, não consegui localizar um andamento disponível no sistema neste momento. Vou direcionar você ao setor de Atendimento para verificarmos.`,\n    };\n  }\n\n  if (result.found === false) {\n    return {\n      handled: false,\n      forceHandoff: true,\n      reason: "progress_not_found",\n      handoffMessage:\n        `${firstName(attrs?.ia_nome) || "Olá"}, não encontrei um andamento cadastrado para consulta automática. Vou direcionar você ao setor de Atendimento para verificarmos.`,\n    };\n  }'''
+          if old_error not in s:
+              raise SystemExit('Bloco de fallback de andamento nao encontrado')
+          s = s.replace(old_error, new_error, 1)
+
+          old_message = '''  if (!message) {\n    return null;\n  }'''
+          new_message = '''  if (!message) {\n    return {\n      handled: false,\n      forceHandoff: true,\n      reason: "progress_empty",\n      handoffMessage:\n        `${firstName(attrs?.ia_nome || result?.cliente?.nome) || "Olá"}, localizei seu cadastro, mas não há um andamento disponível para consulta automática. Vou direcionar você ao setor de Atendimento para verificarmos.`,\n    };\n  }'''
+          if old_message not in s:
+              raise SystemExit('Bloco de mensagem vazia nao encontrado')
+          s = s.replace(old_message, new_message, 1)
+
+          p.write_text(s)
+          PY
+      - name: Commit change
+        run: |
+          git config user.name "Integral Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add Agente-IA-Integral-v1.0.3-INCOMING-CORRIGIDO/lib/agent.js
+          git commit -m "fix: consultar CRM antes de rotear andamento" || exit 0
+          git push
