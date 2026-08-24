@@ -23,13 +23,17 @@ async function alreadySent(paymentId,phone){
 async function logSend({paymentId,phone,due,status,error=''}){
   return sb('financeiro_whatsapp_envios?on_conflict=pagamento_id,destinatario',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({pagamento_id:String(paymentId),destinatario:String(phone),vencimento:due,status,erro:error||null,enviado_em:new Date().toISOString()})});
 }
+function authorized(req){
+  const expected=process.env.FINANCE_CRON_TOKEN||process.env.NUDGE_CRON_TOKEN||process.env.CRON_SECRET||'';
+  if(!expected)return false;
+  const queryToken=String(req.query?.token||'');
+  const auth=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
+  return queryToken===expected||auth===expected;
+}
 
 export default async function handler(req,res){
   try{
-    if(process.env.CRON_SECRET){
-      const auth=req.headers.authorization||'';
-      if(auth!==`Bearer ${process.env.CRON_SECRET}`)return res.status(401).json({ok:false,error:'unauthorized'});
-    }
+    if(!authorized(req))return res.status(401).json({ok:false,error:'unauthorized'});
     const due=localDate(),phone=DESTINATION();
     const payments=await sb(`financeiro_pagamentos?vencimento=eq.${due}&status=neq.Paga&codigo_pagamento=not.is.null&codigo_pagamento=neq.&select=id,conta_id,vencimento,valor,status,forma_pagamento,codigo_pagamento`);
     if(!payments?.length)return res.status(200).json({ok:true,date:due,due:0,sent:0});
