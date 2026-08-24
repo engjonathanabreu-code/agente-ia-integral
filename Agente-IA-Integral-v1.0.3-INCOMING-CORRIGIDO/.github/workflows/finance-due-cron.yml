@@ -1,0 +1,19 @@
+name: Contas a pagar - WhatsApp 09h
+
+on:
+  schedule:
+    # 12:00 UTC = 09:00 em America/Sao_Paulo
+    - cron: "0 12 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  finance-due-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar contas que vencem hoje
+        run: |
+          curl --fail --silent --show-error \
+            "${AGENT_BASE_URL}/api/finance-due-reminders?token=${NUDGE_CRON_TOKEN}"
+        env:
+          AGENT_BASE_URL: ${{ secrets.AGENT_BASE_URL }}
+          NUDGE_CRON_TOKEN: ${{ secrets.NUDGE_CRON_TOKEN }}
