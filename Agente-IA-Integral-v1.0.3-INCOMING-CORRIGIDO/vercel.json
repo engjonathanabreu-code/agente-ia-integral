@@ -15,12 +15,6 @@
       "maxDuration": 60
     }
   },
-  "crons": [
-    {
-      "path": "/api/finance-due-reminders",
-      "schedule": "0 12 * * *"
-    }
-  ],
   "rewrites": [
     {
       "source": "/",
