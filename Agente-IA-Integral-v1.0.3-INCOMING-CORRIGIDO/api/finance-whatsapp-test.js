@@ -3,7 +3,6 @@ import {sendDuePaymentWhatsApp} from '../lib/finance-whatsapp.js';
 const ONE_TIME_TOKEN='test-20260824-9h-47-996757213';
 
 export default async function handler(req,res){
-  if(req.method!=='POST')return res.status(405).json({ok:false,error:'method_not_allowed'});
   if(String(req.query?.token||'')!==ONE_TIME_TOKEN)return res.status(401).json({ok:false,error:'unauthorized'});
   try{
     const phone=process.env.FINANCE_WHATSAPP_DESTINATION||'5547996757213';
