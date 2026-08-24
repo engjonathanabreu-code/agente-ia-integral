@@ -132,6 +132,18 @@ function isAndamentoIntent(message) {
   const terms = [
     "andamento",
     "andamentos",
+    "ver do meu processo",
+    "ver meu processo",
+    "ver o meu processo",
+    "quero ver meu processo",
+    "quero ver o meu processo",
+    "quero ver do meu processo",
+    "saber do meu processo",
+    "saber sobre meu processo",
+    "consultar meu processo",
+    "consultar o meu processo",
+    "acompanhar meu processo",
+    "acompanhar o meu processo",
     "status do processo",
     "status processo",
     "como esta meu processo",
@@ -489,11 +501,23 @@ async function tryAnswerProgress(
     !result ||
     result.ok === false
   ) {
-    return null;
+    return {
+      handled: false,
+      forceHandoff: true,
+      reason: "progress_lookup_failed",
+      handoffMessage:
+        `${firstName(attrs?.ia_nome) || "Olá"}, não consegui localizar um andamento disponível no sistema neste momento. Vou direcionar você ao setor de Atendimento para verificarmos.`,
+    };
   }
 
   if (result.found === false) {
-    return null;
+    return {
+      handled: false,
+      forceHandoff: true,
+      reason: "progress_not_found",
+      handoffMessage:
+        `${firstName(attrs?.ia_nome) || "Olá"}, não encontrei um andamento cadastrado para consulta automática. Vou direcionar você ao setor de Atendimento para verificarmos.`,
+    };
   }
 
   if (
@@ -536,7 +560,13 @@ async function tryAnswerProgress(
     );
 
   if (!message) {
-    return null;
+    return {
+      handled: false,
+      forceHandoff: true,
+      reason: "progress_empty",
+      handoffMessage:
+        `${firstName(attrs?.ia_nome || result?.cliente?.nome) || "Olá"}, localizei seu cadastro, mas não há um andamento disponível para consulta automática. Vou direcionar você ao setor de Atendimento para verificarmos.`,
+    };
   }
 
   await sendMessage(
