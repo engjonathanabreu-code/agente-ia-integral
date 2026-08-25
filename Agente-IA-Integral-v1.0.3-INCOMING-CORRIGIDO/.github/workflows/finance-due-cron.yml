@@ -1,19 +1,11 @@
-name: Contas a pagar - WhatsApp 09h
+name: Contas a pagar - WhatsApp (legado desativado)
 
 on:
-  schedule:
-    # 12:00 UTC = 09:00 em America/Sao_Paulo
-    - cron: "0 12 * * *"
   workflow_dispatch: {}
 
 jobs:
-  finance-due-reminders:
+  legacy-disabled:
     runs-on: ubuntu-latest
     steps:
-      - name: Enviar contas que vencem hoje
-        run: |
-          curl --fail --silent --show-error \
-            "${AGENT_BASE_URL}/api/finance-due-reminders?token=${NUDGE_CRON_TOKEN}"
-        env:
-          AGENT_BASE_URL: ${{ secrets.AGENT_BASE_URL }}
-          NUDGE_CRON_TOKEN: ${{ secrets.NUDGE_CRON_TOKEN }}
+      - name: Automação migrada
+        run: echo "Automação oficial migrada para o agendamento canônico do Supabase/Financeiro."
