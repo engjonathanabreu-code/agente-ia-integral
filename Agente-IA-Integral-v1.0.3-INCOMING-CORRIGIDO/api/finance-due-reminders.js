@@ -30,32 +30,55 @@ function authorized(req){
   const auth=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
   return queryToken===expected||auth===expected;
 }
+function stateMap(rows){return new Map((rows||[]).map(r=>[String(r.chave),r.dados]));}
 
 export default async function handler(req,res){
   try{
     if(!authorized(req))return res.status(401).json({ok:false,error:'unauthorized'});
     const due=localDate(),phone=DESTINATION();
-    const payments=await sb(`financeiro_pagamentos?vencimento=eq.${due}&status=neq.Paga&codigo_pagamento=not.is.null&codigo_pagamento=neq.&select=id,conta_id,vencimento,valor,status,forma_pagamento,codigo_pagamento`);
-    if(!payments?.length)return res.status(200).json({ok:true,date:due,due:0,sent:0});
-    const ids=[...new Set(payments.map(p=>p.conta_id).filter(Boolean))];
-    let accounts=[];
-    if(ids.length)accounts=await sb(`financeiro_contas?id=in.(${ids.map(x=>`"${String(x).replace(/"/g,'')}"`).join(',')})&select=id,nome,fornecedor`);
-    const byId=new Map((accounts||[]).map(a=>[String(a.id),a]));
+
+    // Fonte oficial do Financeiro: mesma persistência que a interface utiliza.
+    const state=await sb('financeiro_estado_modulos?chave=in.(accountPayments,accountMasters)&select=chave,dados');
+    const map=stateMap(state);
+    const payments=Array.isArray(map.get('accountPayments'))?map.get('accountPayments'):[];
+    const accounts=Array.isArray(map.get('accountMasters'))?map.get('accountMasters'):[];
+    const byId=new Map(accounts.map(a=>[String(a.id),a]));
+
+    const todayPayments=payments.filter(p=>
+      String(p?.due||'').slice(0,10)===due &&
+      !/paga|pago|cancelad/i.test(String(p?.status||''))
+    );
+
+    if(!todayPayments.length)return res.status(200).json({ok:true,date:due,due:0,sent:0,source:'financeiro_estado_modulos'});
+
     const results=[];
-    for(const p of payments){
-      if(await alreadySent(p.id,phone)){results.push({id:p.id,status:'already_sent'});continue;}
-      const a=byId.get(String(p.conta_id));
-      const accountName=a?.nome||a?.fornecedor||'Conta';
+    for(const p of todayPayments){
+      const paymentId=String(p.id??`${p.accountId}-${p.due}-${p.value}`);
+      if(await alreadySent(paymentId,phone)){results.push({id:paymentId,status:'already_sent'});continue;}
+      const a=byId.get(String(p.accountId))||{};
+      const accountName=a.name||a.supplier||'Conta cadastrada';
+      const method=a.method||p.method||'Não informada';
+      const code=String(p.barcode||p.paymentCode||'').trim();
+      const paymentInstruction=code?`${method} • ${code}`:method;
       try{
-        await sendDuePaymentWhatsApp({phone,accountName,value:p.valor,paymentCode:p.codigo_pagamento,dueDate:p.vencimento});
-        await logSend({paymentId:p.id,phone,due:p.vencimento,status:'enviado'});
-        results.push({id:p.id,status:'sent'});
+        const sent=await sendDuePaymentWhatsApp({
+          phone,
+          accountName,
+          value:Number(p.value||0),
+          paymentCode:paymentInstruction,
+          dueDate:p.due,
+          supplier:a.supplier||'',
+          method,
+          notes:p.notes||''
+        });
+        await logSend({paymentId,phone,due:p.due,status:'enviado'});
+        results.push({id:paymentId,status:'sent',messageId:sent?.id||null,accountName});
       }catch(e){
-        await logSend({paymentId:p.id,phone,due:p.vencimento,status:'erro',error:String(e.message||e).slice(0,800)}).catch(()=>{});
-        results.push({id:p.id,status:'error',error:e.message||String(e)});
+        await logSend({paymentId,phone,due:p.due,status:'erro',error:String(e.message||e).slice(0,800)}).catch(()=>{});
+        results.push({id:paymentId,status:'error',error:e.message||String(e),accountName});
       }
     }
-    return res.status(200).json({ok:true,date:due,due:payments.length,sent:results.filter(x=>x.status==='sent').length,results});
+    return res.status(200).json({ok:true,date:due,due:todayPayments.length,sent:results.filter(x=>x.status==='sent').length,source:'financeiro_estado_modulos',results});
   }catch(e){
     console.error('finance-due-reminders',e);
     return res.status(500).json({ok:false,error:e.message||String(e)});
