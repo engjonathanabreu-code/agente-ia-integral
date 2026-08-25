@@ -5,6 +5,7 @@ function localDate(offsetDays=0){
 }
 async function jsonFetch(url,headers={}){const r=await fetch(url,{headers});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text}return{ok:r.ok,status:r.status,data};}
 const arr=v=>Array.isArray(v)?v:Array.isArray(v?.payload)?v.payload:Array.isArray(v?.data)?v.data:[];
+function bodyVars(t){const s=JSON.stringify(t?.components||t?.content||t||{});const n=[...s.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(m=>Number(m[1]));return n.length?Math.max(...n):0;}
 
 export default async function handler(req,res){
   const configuredUrl=process.env.ERP_SUPABASE_URL||'https://ycdsyilyvaxslkwbkxyo.supabase.co';
@@ -23,7 +24,7 @@ export default async function handler(req,res){
     if(configuredUrl!==canonicalUrl)out.canonicalProbe=await probe(canonicalUrl);else out.canonicalProbe=configured;
   }
   if(chatBase&&account&&chatToken){
-    try{const ih=await jsonFetch(`${chatBase}/api/v1/accounts/${account}/inboxes`,{api_access_token:chatToken});const inbox=arr(ih.data).find(i=>/whatsapp/i.test(String(i?.channel_type||'')))||arr(ih.data).find(i=>/whatsapp/i.test(String(i?.name||'')));if(inbox?.id){out.whatsappInbox={id:inbox.id,name:inbox.name,channel_type:inbox.channel_type};const th=await jsonFetch(`${chatBase}/api/v1/accounts/${account}/inboxes/${inbox.id}/message_templates`,{api_access_token:chatToken});if(th.ok){const list=arr(th.data);const t=list.find(x=>String(x.name||x.template_name||'')===templateName);out.templateFound=!!t;if(t)out.templateStatus=t.status||null;out.templateNames=list.slice(0,20).map(x=>({name:x.name||x.template_name,status:x.status,category:x.category,language:x.language||x.language_code}));}}}catch(e){out.chatwootDiagnosticError=String(e?.message||e).slice(0,300);}
+    try{const ih=await jsonFetch(`${chatBase}/api/v1/accounts/${account}/inboxes`,{api_access_token:chatToken});const inbox=arr(ih.data).find(i=>/whatsapp/i.test(String(i?.channel_type||'')))||arr(ih.data).find(i=>/whatsapp/i.test(String(i?.name||'')));if(inbox?.id){out.whatsappInbox={id:inbox.id,name:inbox.name,channel_type:inbox.channel_type};const th=await jsonFetch(`${chatBase}/api/v1/accounts/${account}/inboxes/${inbox.id}/message_templates`,{api_access_token:chatToken});if(th.ok){const list=arr(th.data);const t=list.find(x=>String(x.name||x.template_name||'')===templateName);out.templateFound=!!t;if(t)out.templateStatus=t.status||null;out.templateNames=list.slice(0,20).map(x=>({name:x.name||x.template_name,status:x.status,category:x.category,language:x.language||x.language_code,bodyVariables:bodyVars(x)}));}}}catch(e){out.chatwootDiagnosticError=String(e?.message||e).slice(0,300);}
   }
   res.status(200).json(out);
 }
