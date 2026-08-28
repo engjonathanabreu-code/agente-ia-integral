@@ -3,6 +3,8 @@ import {
   handleIncomingMessage,
 } from "../lib/agent.js";
 
+import { guardIntakeMessage } from "../lib/intake-guard.js";
+
 
 /*
 ============================================
@@ -470,7 +472,9 @@ export default async function handler(
 
   try {
 
-    const result =
+    const guarded = await guardIntakeMessage(payload);
+
+    const result = guarded ||
       await handleIncomingMessage(
         payload
       );
