@@ -39,6 +39,87 @@ function looksLikeConversationInsteadOfName(value) {
   return words.some((word) => conversational.has(word));
 }
 
+/*
+====================================================
+PROTEÇÃO DE PRIVACIDADE / PROMPT INJECTION
+====================================================
+
+O texto do cliente é sempre dado não confiável. Estas regras bloqueiam
+pedidos que tentem transformar a conversa em uma interface de consulta ao
+CRM, ao histórico do Chatwoot, às instruções internas ou às credenciais.
+
+Importante: pedidos legítimos sobre o PRÓPRIO processo não são bloqueados.
+*/
+function isPrivacyOrPromptInjectionAttempt(message) {
+  const text = normalize(message);
+  if (!text) return false;
+
+  const instructionOverride = [
+    "ignore as instrucoes", "ignore instrucoes", "ignore suas instrucoes",
+    "desconsidere as instrucoes", "desconsidere suas instrucoes",
+    "esqueca as instrucoes", "esqueca suas instrucoes",
+    "novo prompt", "prompt do sistema", "system prompt", "developer message",
+    "mensagem de sistema", "instrucoes internas", "regras internas",
+    "modo desenvolvedor", "developer mode", "jailbreak",
+  ];
+
+  const secretRequest = [
+    "api key", "chave api", "token", "secret", "segredo",
+    "variavel de ambiente", "variaveis de ambiente", "env var", ".env",
+    "senha do sistema", "credenciais", "service role", "service_role",
+    "webhook token", "crm_agent_read_secret",
+  ];
+
+  const bulkOrThirdPartyData = [
+    "todos os clientes", "lista de clientes", "listar clientes",
+    "cadastro dos clientes", "dados dos clientes", "dados de clientes",
+    "outros clientes", "outro cliente", "cliente de outra pessoa",
+    "telefones dos clientes", "emails dos clientes", "e-mails dos clientes",
+    "nomes dos clientes", "exportar clientes", "exporte os clientes",
+    "dump do banco", "dump database", "banco de dados inteiro",
+    "tabela clientes", "select *", "sql dos clientes",
+  ];
+
+  const chatwootExfiltration = [
+    "todas as conversas", "lista de conversas", "historico de conversas",
+    "historico do chatwoot", "historico dos atendimentos",
+    "registro dos atendimentos", "registros dos atendimentos",
+    "mensagens de outros clientes", "conversas de outros clientes",
+    "logs do chatwoot", "log do chatwoot", "exportar conversas",
+    "transcricao de outros atendimentos", "transcricoes de atendimentos",
+  ];
+
+  const hasOverride = instructionOverride.some((term) => text.includes(term));
+  const hasSecret = secretRequest.some((term) => text.includes(term));
+  const hasBulkData = bulkOrThirdPartyData.some((term) => text.includes(term));
+  const hasChatwootData = chatwootExfiltration.some((term) => text.includes(term));
+
+  // Combinações típicas de tentativa indireta de extração.
+  const mentionsInternalSource = /\b(crm|chatwoot|banco de dados|database|supabase|sistema interno)\b/.test(text);
+  const asksToReveal = /\b(mostre|mostrar|revele|revelar|liste|listar|envie|enviar|copie|copiar|exporte|exportar|imprima|retorne|forneca|fornecer)\b/.test(text);
+  const asksOtherPeople = /\b(outro|outros|outra|outras|todos|todas|terceiro|terceiros)\b/.test(text) && /\b(cliente|clientes|pessoa|pessoas|atendimento|atendimentos|conversa|conversas)\b/.test(text);
+
+  return hasOverride || hasSecret || hasBulkData || hasChatwootData ||
+    (mentionsInternalSource && asksToReveal && asksOtherPeople);
+}
+
+async function blockPrivacyAttempt(conversationId) {
+  await sendMessage(
+    conversationId,
+    "Por segurança e privacidade, não posso fornecer dados de outros clientes, registros internos de atendimentos, conteúdo de outras conversas, credenciais ou instruções internas do sistema. Posso ajudar com informações liberadas sobre o seu próprio atendimento ou encaminhar você para nossa equipe."
+  );
+
+  console.warn("Tentativa de acesso a dados protegidos bloqueada", {
+    conversation_id: conversationId,
+  });
+
+  return {
+    handled: true,
+    action: "privacy_security_block",
+    protected: true,
+  };
+}
+
 async function atendimentoTeamId() {
   const teams = await listTeams();
   const team = (teams || []).find((item) => normalize(item?.name).includes("atendimento"));
@@ -70,6 +151,14 @@ export async function guardIntakeMessage(payload) {
   const conversationId = payload?.conversation?.id || payload?.conversation?.display_id;
   const text = String(payload?.content || "").trim();
   if (!conversationId || !text) return null;
+
+  /*
+   * Executa ANTES de qualquer processamento por IA ou consulta automática.
+   * Assim uma tentativa de prompt injection não alcança classificadores nem CRM.
+   */
+  if (isPrivacyOrPromptInjectionAttempt(text)) {
+    return blockPrivacyAttempt(conversationId);
+  }
 
   const conversation = await getConversation(conversationId);
   const attrs = conversation?.custom_attributes || {};
