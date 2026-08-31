@@ -4,6 +4,10 @@ import {
 } from "../lib/agent.js";
 
 import { guardIntakeMessage } from "../lib/intake-guard.js";
+import {
+  assignConversationToAgent,
+  getConversationMessages,
+} from "../lib/chatwoot.js";
 
 
 /*
@@ -30,11 +34,6 @@ const MESSAGE_TTL_MS =
   10 * 60 * 1000;
 
 
-/*
-Remove IDs antigos para não deixar
-a memória crescer indefinidamente.
-*/
-
 function cleanupProcessedMessages() {
   const now = Date.now();
 
@@ -52,14 +51,6 @@ function cleanupProcessedMessages() {
 }
 
 
-/*
-Tenta reservar uma mensagem.
-
-Retorna:
-true  = pode processar
-false = já foi recebida/processada
-*/
-
 function reserveMessage(messageId) {
   if (!messageId) {
     return true;
@@ -75,14 +66,6 @@ function reserveMessage(messageId) {
   ) {
     return false;
   }
-
-  /*
-  Reserva ANTES de chamar a IA.
-
-  Isso é importante porque impede
-  duas chamadas quase simultâneas
-  dentro da mesma instância.
-  */
 
   processedMessages.set(
     key,
@@ -122,16 +105,172 @@ function sendJson(
 }
 
 
+function isIncomingMessage(message) {
+  return (
+    message?.message_type === "incoming" ||
+    message?.message_type === 0 ||
+    message?.message_type === "0"
+  );
+}
+
+
+function isTemplateMessage(message) {
+  return (
+    message?.message_type === "template" ||
+    message?.message_type === 3 ||
+    message?.message_type === "3"
+  );
+}
+
+
+function isActivityMessage(message) {
+  return (
+    message?.message_type === "activity" ||
+    message?.message_type === 2 ||
+    message?.message_type === "2"
+  );
+}
+
+
+/*
+============================================
+RETORNO DE TEMPLATE PARA AGENTE HUMANO
+============================================
+
+Quando um agente inicia o contato usando um template,
+a resposta do cliente não deve iniciar o fluxo da IA.
+
+A regra procura a mensagem imediatamente anterior do
+atendimento. Se ela for um template enviado por um
+usuário humano, a conversa é atribuída diretamente ao
+mesmo agente e o processamento da IA termina ali.
+*/
+
+async function routeTemplateReplyToHuman(payload) {
+  const conversationId =
+    payload?.conversation?.id ||
+    payload?.conversation_id;
+
+  if (!conversationId) {
+    return null;
+  }
+
+  const history =
+    await getConversationMessages(
+      conversationId
+    );
+
+  const messages =
+    Array.isArray(history?.payload)
+      ? history.payload
+      : Array.isArray(history)
+        ? history
+        : [];
+
+  if (!messages.length) {
+    return null;
+  }
+
+  const currentMessageId =
+    String(payload?.id || "");
+
+  const ordered =
+    [...messages].sort((a, b) => {
+      const timeA = Number(a?.created_at || 0);
+      const timeB = Number(b?.created_at || 0);
+
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+
+      return Number(a?.id || 0) - Number(b?.id || 0);
+    });
+
+  let currentIndex =
+    ordered.findIndex(
+      (message) =>
+        String(message?.id || "") ===
+        currentMessageId
+    );
+
+  if (currentIndex < 0) {
+    currentIndex = ordered.length;
+  }
+
+  for (
+    let index = currentIndex - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    const previous = ordered[index];
+
+    if (isActivityMessage(previous)) {
+      continue;
+    }
+
+    /*
+    Se já existiu outra mensagem do cliente depois do
+    template, não tratamos a mensagem atual como uma
+    resposta direta ao contato iniciado pelo agente.
+    */
+    if (isIncomingMessage(previous)) {
+      return null;
+    }
+
+    /*
+    Mensagens geradas pela própria IA nunca podem ser
+    usadas para descobrir um agente humano.
+    */
+    if (
+      previous?.content_attributes?.integral_ai === true
+    ) {
+      return null;
+    }
+
+    if (!isTemplateMessage(previous)) {
+      return null;
+    }
+
+    const assigneeId =
+      previous?.sender?.id ||
+      previous?.sender_id;
+
+    if (!assigneeId) {
+      return null;
+    }
+
+    await assignConversationToAgent(
+      conversationId,
+      assigneeId
+    );
+
+    console.log(
+      "Resposta de template encaminhada ao agente humano",
+      {
+        conversation_id: conversationId,
+        incoming_message_id: payload?.id,
+        template_message_id: previous?.id,
+        assignee_id: assigneeId,
+      }
+    );
+
+    return {
+      handled: true,
+      reason: "template_reply_to_human_agent",
+      conversation_id: conversationId,
+      template_message_id: previous?.id,
+      assignee_id: Number(assigneeId),
+    };
+  }
+
+  return null;
+}
+
+
 export default async function handler(
   req,
   res
 ) {
-
-  /*
-  ============================================
-  GET / HEALTH
-  ============================================
-  */
 
   if (req.method === "GET") {
     return sendJson(
@@ -162,12 +301,6 @@ export default async function handler(
     );
   }
 
-
-  /*
-  ============================================
-  SEGURANÇA
-  ============================================
-  */
 
   const expectedToken =
     process.env.WEBHOOK_TOKEN;
@@ -262,12 +395,6 @@ export default async function handler(
   );
 
 
-  /*
-  ============================================
-  STATUS DA CONVERSA
-  ============================================
-  */
-
   if (
     payload.event ===
     "conversation_status_changed"
@@ -324,12 +451,6 @@ export default async function handler(
   }
 
 
-  /*
-  ============================================
-  SOMENTE MESSAGE_CREATED
-  ============================================
-  */
-
   if (
     payload.event !==
     "message_created"
@@ -347,18 +468,8 @@ export default async function handler(
   }
 
 
-  /*
-  ============================================
-  SOMENTE MENSAGEM DO CLIENTE
-  ============================================
-  */
-
   const isIncoming =
-    payload.message_type ===
-      "incoming" ||
-    payload.message_type === 0 ||
-    payload.message_type ===
-      "0";
+    isIncomingMessage(payload);
 
 
   if (!isIncoming) {
@@ -391,12 +502,6 @@ export default async function handler(
   }
 
 
-  /*
-  ============================================
-  IGNORA NOTAS PRIVADAS
-  ============================================
-  */
-
   if (
     payload.private === true
   ) {
@@ -412,12 +517,6 @@ export default async function handler(
     );
   }
 
-
-  /*
-  ============================================
-  DEDUPLICAÇÃO
-  ============================================
-  */
 
   const messageId =
     payload?.id;
@@ -464,17 +563,36 @@ export default async function handler(
   }
 
 
-  /*
-  ============================================
-  PROCESSAMENTO DA IA
-  ============================================
-  */
-
   try {
 
-    const guarded = await guardIntakeMessage(payload);
+    /*
+    Esta verificação acontece ANTES de qualquer etapa da IA.
+    Assim, uma resposta a template humano não recebe saudação,
+    pedido de nome, cidade ou menu de setores.
+    */
+    const humanTemplateRoute =
+      await routeTemplateReplyToHuman(
+        payload
+      );
 
-    const result = guarded ||
+    if (humanTemplateRoute) {
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          result: humanTemplateRoute,
+          message_id: messageId,
+        }
+      );
+    }
+
+
+    const guarded =
+      await guardIntakeMessage(payload);
+
+    const result =
+      guarded ||
       await handleIncomingMessage(
         payload
       );
@@ -503,12 +621,6 @@ export default async function handler(
     );
 
   } catch (error) {
-
-    /*
-    Se deu erro real, removemos a reserva
-    para permitir que uma tentativa futura
-    processe novamente a mensagem.
-    */
 
     releaseMessage(
       messageId
