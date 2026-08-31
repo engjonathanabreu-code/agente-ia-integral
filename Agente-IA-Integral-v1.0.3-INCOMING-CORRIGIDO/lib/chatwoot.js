@@ -11,6 +11,7 @@ async function cwFetch(path,options={}){
 }
 
 export async function getConversation(conversationId){return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}`)}
+export async function getConversationMessages(conversationId){return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/messages`)}
 export async function listConversations({status="open",page=1}={}){const params=new URLSearchParams({status,page:String(page)});return cwFetch(`/api/v1/accounts/${accountId()}/conversations?${params.toString()}`)}
 
 function customerFacingMessage(content){
@@ -34,6 +35,7 @@ export async function updateConversationAttributes(conversationId,attributes){re
 export async function listTeams(){return cwFetch(`/api/v1/accounts/${accountId()}/teams`)}
 export async function createTeam(name,description){return cwFetch(`/api/v1/accounts/${accountId()}/teams`,{method:"POST",body:JSON.stringify({name,description,allow_auto_assign:true})})}
 export async function assignConversationToTeam(conversationId,teamId){return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/assignments`,{method:"POST",body:JSON.stringify({team_id:Number(teamId)})})}
+export async function assignConversationToAgent(conversationId,assigneeId){return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/assignments`,{method:"POST",body:JSON.stringify({assignee_id:Number(assigneeId)})})}
 export async function listCustomAttributeDefinitions(){return cwFetch(`/api/v1/accounts/${accountId()}/custom_attribute_definitions`)}
 export async function createConversationAttribute(definition){return cwFetch(`/api/v1/accounts/${accountId()}/custom_attribute_definitions`,{method:"POST",body:JSON.stringify({attribute_display_name:definition.name,attribute_display_type:definition.type??0,attribute_description:definition.description||"",attribute_key:definition.key,attribute_values:definition.values||[],attribute_model:0})})}
 export async function listWebhooks(){return cwFetch(`/api/v1/accounts/${accountId()}/webhooks`)}
