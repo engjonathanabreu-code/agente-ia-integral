@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {integrationEvent,syncIntegration,progressIntegration} from '../lib/integracao.js';
+import {integrationEvent,syncIntegration,progressIntegration,integrationDB} from '../lib/integracao.js';
 process.env.CHATWOOT_BASE_URL='https://chat.example.invalid';process.env.CHATWOOT_ACCOUNT_ID='1';
 process.env.ERP_SUPABASE_SERVICE_ROLE_KEY='fixture';process.env.INTEGRACAO_ENABLED='true';
 const payload={event:'message_created',id:8,account:{id:1},conversation:{id:2,meta:{sender:{id:3,name:'Morador',phone_number:'+5547999990000'},assignee:{id:5}}},sender:{id:6,name:'Equipe',type:'user'},private:true,message_type:'outgoing',content:'Registro interno',created_at:1789822800};
@@ -17,4 +17,9 @@ test('ponte aguarda persistência e consulta somente contexto confirmado',async(
 test('erro de banco não confirma recebimento do webhook',async()=>{
  const original=global.fetch;global.fetch=async()=>({ok:false,status:503});
  try{await assert.rejects(syncIntegration(payload),/database_503/);}finally{global.fetch=original;}
+});
+test('credencial dedicada tem prioridade, remove espaços e aceita secret key moderna',async()=>{
+ const original=global.fetch;let headers;
+ global.fetch=async(u,o)=>{headers=o.headers;return{ok:true,json:async()=>[]};};
+ try{process.env.INTEGRACAO_SUPABASE_SECRET='  sb_secret_fixture\n';await integrationDB('profiles?select=id');assert.equal(headers.apikey,'sb_secret_fixture');assert.equal(headers.Authorization,undefined);}finally{global.fetch=original;delete process.env.INTEGRACAO_SUPABASE_SECRET;}
 });
