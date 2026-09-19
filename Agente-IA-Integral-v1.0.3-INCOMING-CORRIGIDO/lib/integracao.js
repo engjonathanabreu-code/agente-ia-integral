@@ -4,11 +4,11 @@ export const installation = () => new URL(process.env.CHATWOOT_BASE_URL).host;
 export const account = () => String(process.env.CHATWOOT_ACCOUNT_ID || '');
 const externalId = v => /^\d{1,18}$/.test(String(v ?? '')) ? String(v) : null;
 export async function integrationDB(path, body, method) {
-  const key = process.env.ERP_SUPABASE_SERVICE_ROLE_KEY;
+  const key = (process.env.INTEGRACAO_SUPABASE_SECRET || process.env.ERP_SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!key) throw new Error('integration_credential_missing');
   const r = await fetch(`https://ycdsyilyvaxslkwbkxyo.supabase.co/rest/v1/${path}`, {
     method: method || (body === undefined ? 'GET' : 'POST'),
-    headers: {apikey:key, Authorization:`Bearer ${key}`, 'Content-Type':'application/json', Prefer:'return=representation'},
+    headers: {apikey:key, ...(key.startsWith('sb_secret_')?{}:{Authorization:`Bearer ${key}`}), 'Content-Type':'application/json', Prefer:'return=representation'},
     body:body === undefined ? undefined : JSON.stringify(body), signal:AbortSignal.timeout(15000)
   });
   if (!r.ok) throw new Error(`integration_database_${r.status}`);
