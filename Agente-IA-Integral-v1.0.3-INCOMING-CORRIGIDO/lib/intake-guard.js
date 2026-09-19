@@ -1,3 +1,4 @@
+import {integrationEnabled} from './integracao.js';
 import {
   assignConversationToTeam,
   getConversation,
@@ -174,7 +175,7 @@ export async function guardIntakeMessage(payload) {
 
   // Proteção específica da etapa de nome: frases conversacionais como "Nossa mudou"
   // não podem ser gravadas como nome só porque contêm duas palavras com letras.
-  if (stage === "nome" && looksLikeConversationInsteadOfName(text)) {
+  if (!integrationEnabled() && stage === "nome" && looksLikeConversationInsteadOfName(text)) {
     await sendMessage(
       conversationId,
       "Desculpe, não consegui entender seu nome. Pode me informar novamente seu nome completo, com nome e sobrenome?"
