@@ -1,3 +1,4 @@
+import {syncIntegration} from '../../lib/integracao.js';
 import {
   handleConversationStatusChanged,
   handleIncomingMessage,
@@ -271,23 +272,6 @@ export default async function handler(
   IA ATIVA?
   */
 
-  if (
-    process.env.AI_ENABLED ===
-    "false"
-  ) {
-    return sendJson(
-      res,
-      200,
-      {
-        ok: true,
-        ignored: true,
-        reason:
-          "ai_disabled",
-      }
-    );
-  }
-
-
   const payload =
     req.body;
 
@@ -304,6 +288,27 @@ export default async function handler(
       }
     );
   }
+
+
+  // Archive every supported event before AI gates, including outgoing/private messages.
+  try { await syncIntegration(payload); }
+  catch (error) { console.error('integracao-sync',{code:error.message}); return sendJson(res,503,{ok:false,error:'Falha ao registrar conversa no Integração'}); }
+  if (
+    process.env.AI_ENABLED ===
+    "false"
+  ) {
+    return sendJson(
+      res,
+      200,
+      {
+        ok: true,
+        ignored: true,
+        reason:
+          "ai_disabled",
+      }
+    );
+  }
+
 
 
   console.log(

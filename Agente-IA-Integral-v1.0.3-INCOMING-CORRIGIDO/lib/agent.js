@@ -1,3 +1,6 @@
+import {integrationEnabled,progressIntegration} from './integracao.js';
+import {collectIdentity,formatNucleusProgress} from './integracao-intake.js';
+import {guardIntakeMessage} from './intake-guard.js';
 import OpenAI from "openai";
 
 import {
@@ -270,7 +273,8 @@ CRM / ANDAMENTO
 ===========================================
 */
 
-async function getClientProgress(conversationId) {
+async function getClientProgress(conversationId, attrs) {
+  if (integrationEnabled()) return progressIntegration(conversationId, attrs);
   const secret = process.env.CRM_AGENT_READ_SECRET;
 
   const baseUrl =
@@ -494,7 +498,7 @@ async function tryAnswerProgress(
 
   const result =
     await getClientProgress(
-      conversationId
+      conversationId, attrs
     );
 
   if (
@@ -510,6 +514,14 @@ async function tryAnswerProgress(
     };
   }
 
+  if (result.identity_pending) {
+    if (Number(attrs.ia_revisoes_identidade||0)<2) {
+      await updateConversationAttributes(conversationId,{...attrs,ia_etapa:'identidade',ia_pede_andamento:true,ia_revisoes_identidade:Number(attrs.ia_revisoes_identidade||0)+1});
+      await sendMessage(conversationId,result.pergunta||'Pode conferir seu nome completo, CPF e município do imóvel?');
+      return {handled:true,identity_pending:true};
+    }
+    return {handled:false,forceHandoff:true,reason:'identity_review',handoffMessage:'Vou encaminhar para a equipe conferir seu cadastro e continuar o atendimento.'};
+  }
   if (result.found === false) {
     return {
       handled: false,
@@ -554,10 +566,8 @@ async function tryAnswerProgress(
     };
   }
 
-  const message =
-    progressResponseText(
-      result
-    );
+  const fallback = progressResponseText(result);
+  const message = integrationEnabled() && fallback ? await formatNucleusProgress(result,fallback) : fallback;
 
   if (!message) {
     return {
@@ -2018,6 +2028,15 @@ export async function handleIncomingMessage(
     };
   }
 
+  const guarded=await guardIntakeMessage({...payload,content:text});
+  if (guarded) return guarded;
+  const collected=await collectIdentity(conversationId,text,attrs);
+  if (collected?.handled) return collected;
+  if (collected?.ready) {
+    if (collected.progressRequested) return routeCustomerNeed(conversationId,collected.attrs,'Quero saber o andamento do meu processo');
+    await sendMessage(conversationId,'Obrigado. Como posso ajudar você hoje?');
+    return {stage:'necessidade'};
+  }
   console.log(
     "Agente IA processando mensagem",
     {
