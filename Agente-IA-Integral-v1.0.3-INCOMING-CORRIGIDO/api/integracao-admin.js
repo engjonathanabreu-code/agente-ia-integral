@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import {integrationDB,installation,account,integrationEnabled,syncIntegration} from '../lib/integracao.js';
 import {listWebhooks,updateWebhook,getConversation,getConversationMessages,listConversations} from '../lib/chatwoot.js';
+import {extractIdentity,formatNucleusProgress} from '../lib/integracao-intake.js';
 const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 export const rows=v=>[v,v?.payload,v?.data,v?.webhooks,v?.agents,v?.data?.payload,v?.payload?.webhooks].find(Array.isArray)||[];
 export default async function handler(req,res) {
@@ -31,10 +32,15 @@ export default async function handler(req,res) {
           if (!existing.length) await integrationDB('integracao_crm_agentes',{instalacao:installation(),conta_id:account(),agente_id:m.agente_id,usuario_id:m.usuario_id});
         }
         await updateWebhook(own[0].id,own[0].url);
+      } else if (req.body?.action==='verify_model') {
+        phase='model';
+        const identity=await extractIdentity('Sou de Taió, meu nome é José da Silva. Gostaria do andamento do meu processo.',{});
+        const answer=await formatNucleusProgress({projeto:{nome:'Núcleo de teste'},instrucao_nucleo:'Responda de forma breve.',andamento_atual:{descricao_cliente:'Documentação em análise pela prefeitura.',previsao:null}},'Documentação em análise pela prefeitura.');
+        return res.status(200).json({ok:!!identity.nome&&!!identity.cidade,identificacao:identity,resposta_sintetica:answer,mensagem_enviada:false});
       } else if (req.body?.action==='reconcile'&&/^\d{1,18}$/.test(String(req.body.conversation_id||''))) {
         const c=await getConversation(req.body.conversation_id);
         await syncIntegration({...c,account:{id:account()},event:'conversation_updated'});
-        const h=await getConversationMessages(req.body.conversation_id), messages=Array.isArray(h)?h:h.payload||[];
+        const h=await getConversationMessages(req.body.conversation_id), messages=rows(h);
         for (const m of messages) await syncIntegration({...m,conversation:c,account:{id:account()},event:'message_created'});
         return res.status(200).json({ok:true,mensagens:messages.length});
       } else return res.status(400).json({error:'Ação inválida'});
