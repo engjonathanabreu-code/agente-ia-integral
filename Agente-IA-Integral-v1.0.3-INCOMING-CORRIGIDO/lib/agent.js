@@ -1,3 +1,4 @@
+import {commercialIntent,missingQuestion} from './intake-language.js';
 import {verifiedTeamAssignment,transferFailure} from './handoff.js';
 import {humanSince,timestamp} from './conversation-control.js';
 import {integrationEnabled,progressIntegration} from './integracao.js';
@@ -137,6 +138,10 @@ function isAndamentoIntent(message) {
   const terms = [
     "andamento",
     "andamentos",
+    "minha escritura esta",
+    "minha matricula esta",
+    "situacao da escritura",
+    "situacao da matricula",
     "ver do meu processo",
     "ver meu processo",
     "ver o meu processo",
@@ -517,9 +522,9 @@ async function tryAnswerProgress(
   }
 
   if (result.identity_pending) {
-    if (Number(attrs.ia_revisoes_identidade||0)<2) {
-      await updateConversationAttributes(conversationId,{...attrs,ia_etapa:'identidade',ia_pede_andamento:true,ia_revisoes_identidade:Number(attrs.ia_revisoes_identidade||0)+1});
-      await sendMessage(conversationId,result.pergunta||'Pode conferir seu nome completo, CPF e município do imóvel?');
+    if (result.acao!=='revisao_equipe'&&!attrs.ia_documento&&Number(attrs.ia_revisoes_identidade||0)<1) {
+      await updateConversationAttributes(conversationId,{...attrs,ia_etapa:'identidade',ia_pede_andamento:true,ia_campo_pendente:result.campos_faltantes?.[0]||'documento',ia_revisoes_identidade:Number(attrs.ia_revisoes_identidade||0)+1});
+      await sendMessage(conversationId,result.pergunta||missingQuestion(attrs,'documento'));
       return {handled:true,identity_pending:true};
     }
     return {handled:false,forceHandoff:true,reason:'identity_review',handoffMessage:'Vou encaminhar para a equipe conferir seu cadastro e continuar o atendimento.'};
@@ -885,6 +890,7 @@ function directSectorMatch(message) {
     ];
   }
 
+  if(commercialIntent(message)) return 'Comercial';
   const patterns = [
     [
       "Financeiro",
@@ -1414,7 +1420,7 @@ async function handoffToSector(
     {
       ...attrs,
 
-      ia_encaminhamento_pendente:false,
+      ia_encaminhamento_pendente:false,ia_encaminhado_em:new Date().toISOString(),ia_ultima_cutucada_em:"",ia_fim_expediente_avisado_em:"",
       ia_setor:
         sector,
 
@@ -1439,7 +1445,7 @@ async function handoffToSector(
 
     `${firstName(
       attrs.ia_nome
-    ) || "Olá"}, entendi! Vou te direcionar para o setor de ${sector}, alguém da nossa equipe continua o atendimento por aqui.`
+    ) || "Olá"}, encaminhei seu pedido à equipe de ${sector}. As informações que você enviou seguem nesta conversa.`
   );
 
   return {
@@ -1859,6 +1865,7 @@ export async function handleConversationStatusChanged(
       ...attrs,
 
       ia_resolvido_em: new Date(payload._resolvedAt||Date.now()).toISOString(),
+      ia_pedido_original:'',ia_pede_andamento:false,ia_campo_pendente:'',ia_sem_dados_novos:0,ia_revisoes_identidade:0,
       ia_etapa:
         "retorno",
 
@@ -1996,11 +2003,14 @@ export async function handleIncomingMessage(
 
   const guarded=await guardIntakeMessage({...payload,content:text});
   if (guarded) return guarded;
+  if(commercialIntent(text)) return handoffToSector(conversationId,attrs,'Comercial',text,'Vou encaminhar sua solicitação ao Comercial, que cuida de novos serviços e parcerias.');
   const collected=await collectIdentity(conversationId,text,attrs);
   if (collected?.handled) return collected;
+  if(collected?.review) return handoffToSector(conversationId,collected.attrs,'Atendimento',collected.attrs.ia_pedido_original||text,'Vou encaminhar os dados que você já informou para a equipe conferir o cadastro e continuar o atendimento.');
   if (collected?.ready) {
     if (collected.progressRequested) return routeCustomerNeed(conversationId,collected.attrs,'Quero saber o andamento do meu processo');
-    await sendMessage(conversationId,'Obrigado. Como posso ajudar você hoje?');
+    if(collected.originalNeed) return routeCustomerNeed(conversationId,collected.attrs,collected.originalNeed);
+    await sendMessage(conversationId,'Obrigado pelos dados. O que você precisa resolver hoje?');
     return {stage:'necessidade'};
   }
   console.log(

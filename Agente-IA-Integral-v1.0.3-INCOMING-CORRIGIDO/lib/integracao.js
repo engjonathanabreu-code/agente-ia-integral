@@ -26,7 +26,7 @@ export function integrationEvent(p) {
   if (Number.isNaN(date.getTime())) throw new Error('integration_date_invalid');
   return {instalacao:installation(),conta_id:conta,conversa_id:conversa,contato_id:contato,mensagem_id:mensagem,
     agente_id:externalId(c.meta?.assignee?.id||c.assignee_id),nome:contact?.name||'Contato Chatwoot',telefone:contact?.phone_number||'',
-    conteudo:typeof p.content==='string'?p.content:'',privada:p.private===true,autor:p.sender?.name||'',direcao:String(p.message_type??''),
+    conteudo:typeof p.content==='string'?p.content:'',privada:p.private===true,autor:p.sender?.name||'',autor_tipo:p.sender?.type,autor_chatwoot_id:externalId(p.sender?.id),direcao:String(p.message_type??''),
     anexos:(p.attachments||[]).map(a=>({id:a.id,nome:a.file_name||a.file_type,url:a.data_url,file_type:a.file_type})),data:date.toISOString()};
 }
 export async function syncIntegration(payload) {
@@ -35,7 +35,7 @@ export async function syncIntegration(payload) {
   if (!evento) return null;
   const id=await integrationDB('rpc/integracao_crm_receber',{evento});
   const attrs=(payload.conversation||payload).custom_attributes||{};
-  if (attrs.ia_nome&&attrs.ia_cidade) await identifyIntegration(evento.conversa_id,attrs);
+  if (!attrs.ia_representante&&attrs.ia_nome&&attrs.ia_cidade) await identifyIntegration(evento.conversa_id,attrs);
   return id;
 }
 export async function identifyIntegration(conversationId, attrs) {
@@ -44,10 +44,12 @@ export async function identifyIntegration(conversationId, attrs) {
 }
 export async function progressIntegration(conversationId, attrs={}) {
   const identity=await identifyIntegration(conversationId,attrs);
-  if (!identity?.confirmado) return {ok:true,found:false,identity_pending:true,pergunta:identity?.pergunta};
+  if (!identity?.confirmado) return {ok:true,found:false,identity_pending:true,pergunta:identity?.pergunta,acao:identity?.acao,campos_faltantes:identity?.campos_faltantes};
   const c=await integrationDB('rpc/integracao_crm_contexto',{instalacao:installation(),conta:account(),conversa:String(conversationId)});
   if (!c) return {ok:true,found:true,andamento_available:false,availability_reason:'nucleus_not_enabled_or_linked'};
   const p=c.andamentos?.[0];
   return {ok:true,found:true,andamento_available:!!p,availability_reason:p?null:'no_published_progress',projeto:{nome:c.nucleo},instrucao_nucleo:c.instrucao||'',
     andamento_atual:p?{etapa:p.status,status_operacional:p.status_operacional,descricao_cliente:p.descricao,previsao:p.previsao,atualizado_em:p.data,orientacao_ia:p.orientacao}:null};
 }
+
+export async function municipalityCatalog(){return integrationDB('rpc/integracao_ia_municipios',{});}

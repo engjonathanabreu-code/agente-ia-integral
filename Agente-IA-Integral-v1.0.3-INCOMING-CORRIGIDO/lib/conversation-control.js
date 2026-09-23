@@ -7,7 +7,7 @@ export const humanMessage = p => ['outgoing',1,'1','template',3,'3'].includes(p?
   && p?.content_attributes?.integral_ai !== true && !['agent_bot','AgentBot'].includes(p?.sender?.type);
 export function timestamp(value) {
   const n=typeof value==='number'?value*1000:Date.parse(value);
-  return Number.isFinite(n)?n:0;
+  return Number.isFinite(n)?Math.round(n):0;
 }
 export function humanSince(messages, since=0) {
   return messages.some(m=>humanMessage(m) && (timestamp(m.created_at)>since || !m.created_at));

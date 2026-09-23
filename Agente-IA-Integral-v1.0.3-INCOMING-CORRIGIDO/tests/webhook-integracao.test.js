@@ -15,6 +15,7 @@ before(async()=>{
  global.fetch=async(url,o={})=>{
   const body=o.body?JSON.parse(o.body):{};url=typeof url==='string'?url:url.url;
   if(url.endsWith('/rpc/integracao_ia_controle'))return response((await db.query('select integracao_ia_controle($1,$2) r',[body.operacao,JSON.stringify(body.dados)])).rows[0].r);
+  if(url.endsWith('/rpc/integracao_ia_municipios'))return response(['Taió']);
   if(url.endsWith('/rpc/integracao_crm_receber')){archived.push(body.evento);return response('uuid');}
   if(url.endsWith('/rpc/integracao_crm_identificar')){identities.push(body);return response({confirmado:true});}
   if(url.includes('api.openai.com')){
