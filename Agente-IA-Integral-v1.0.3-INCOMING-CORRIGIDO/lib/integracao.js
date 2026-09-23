@@ -46,8 +46,8 @@ export async function progressIntegration(conversationId, attrs={}) {
   const identity=await identifyIntegration(conversationId,attrs);
   if (!identity?.confirmado) return {ok:true,found:false,identity_pending:true,pergunta:identity?.pergunta};
   const c=await integrationDB('rpc/integracao_crm_contexto',{instalacao:installation(),conta:account(),conversa:String(conversationId)});
-  if (!c) return {ok:true,found:true,andamento_available:false};
+  if (!c) return {ok:true,found:true,andamento_available:false,availability_reason:'nucleus_not_enabled_or_linked'};
   const p=c.andamentos?.[0];
-  return {ok:true,found:true,andamento_available:!!p,projeto:{nome:c.nucleo},instrucao_nucleo:c.instrucao||'',
+  return {ok:true,found:true,andamento_available:!!p,availability_reason:p?null:'no_published_progress',projeto:{nome:c.nucleo},instrucao_nucleo:c.instrucao||'',
     andamento_atual:p?{etapa:p.status,status_operacional:p.status_operacional,descricao_cliente:p.descricao,previsao:p.previsao,atualizado_em:p.data,orientacao_ia:p.orientacao}:null};
 }

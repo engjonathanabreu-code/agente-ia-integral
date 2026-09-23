@@ -1,9 +1,10 @@
+import {execution,assertActive,markEffect,actionKey,humanSince,timestamp} from './conversation-control.js';
 const base=()=>{const value=process.env.CHATWOOT_BASE_URL;if(!value)throw new Error("CHATWOOT_BASE_URL não configurada.");return value.replace(/\/+$/,"")};
 const accountId=()=>{const value=process.env.CHATWOOT_ACCOUNT_ID;if(!value)throw new Error("CHATWOOT_ACCOUNT_ID não configurada.");return value};
 const token=()=>{const value=process.env.CHATWOOT_API_TOKEN;if(!value)throw new Error("CHATWOOT_API_TOKEN não configurado.");return value};
 
 async function cwFetch(path,options={}){
-  const response=await fetch(`${base()}${path}`,{...options,headers:{"Content-Type":"application/json",api_access_token:token(),...(options.headers||{})}});
+  const response=await fetch(`${base()}${path}`,{signal:AbortSignal.timeout(10000),...options,headers:{"Content-Type":"application/json",api_access_token:token(),...(options.headers||{})}});
   const text=await response.text();let data=null;
   try{data=text?JSON.parse(text):null}catch{data=text}
   if(!response.ok){const error=new Error(`Chatwoot ${response.status}: ${typeof data==="string"?data:JSON.stringify(data)}`);error.status=response.status;error.data=data;throw error}
@@ -28,14 +29,33 @@ function customerFacingMessage(content){
 }
 
 export async function sendMessage(conversationId,content){
-  return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/messages`,{method:"POST",body:JSON.stringify({content:customerFacingMessage(content),message_type:"outgoing",private:false,content_type:"text",content_attributes:{integral_ai:true}})});
+  await assertActive();
+  const context=execution.getStore();
+  const key=actionKey(content);
+  {
+    const live=await getConversation(conversationId);
+    const history=await getConversationMessages(conversationId);
+    const messages=Array.isArray(history?.payload)?history.payload:Array.isArray(history)?history:[];
+    if(live.status==='resolved' || humanSince(messages,timestamp(live.custom_attributes?.ia_resolvido_em))) throw new Error('human_takeover');
+    const already=key && messages.find(m=>m.content_attributes?.integral_ai_action===key);
+    if(already) return already;
+    await markEffect();
+  }
+
+  return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/messages`,{method:"POST",body:JSON.stringify({content:customerFacingMessage(content),message_type:"outgoing",private:false,content_type:"text",content_attributes:{integral_ai:true,...(key?{integral_ai_action:key}:{})}})});
 }
 
-export async function updateConversationAttributes(conversationId,attributes){return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/custom_attributes`,{method:"POST",body:JSON.stringify({custom_attributes:attributes})})}
+export async function updateConversationAttributes(conversationId,attributes){
+  await assertActive();
+  const live=await getConversation(conversationId);
+  // Callers pass historical snapshots; preserve unrelated attributes edited by people.
+  const patch=Object.fromEntries(Object.entries(attributes).filter(([key])=>key.startsWith('ia_')));
+  attributes={...live.custom_attributes,...patch};
+  await markEffect();return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/custom_attributes`,{method:"POST",body:JSON.stringify({custom_attributes:attributes})})}
 export async function listTeams(){return cwFetch(`/api/v1/accounts/${accountId()}/teams`)}
 export async function createTeam(name,description){return cwFetch(`/api/v1/accounts/${accountId()}/teams`,{method:"POST",body:JSON.stringify({name,description,allow_auto_assign:true})})}
-export async function assignConversationToTeam(conversationId,teamId){return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/assignments`,{method:"POST",body:JSON.stringify({team_id:Number(teamId)})})}
-export async function assignConversationToAgent(conversationId,assigneeId){return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/assignments`,{method:"POST",body:JSON.stringify({assignee_id:Number(assigneeId)})})}
+export async function assignConversationToTeam(conversationId,teamId){await markEffect();return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/assignments`,{method:"POST",body:JSON.stringify({team_id:Number(teamId)})})}
+export async function assignConversationToAgent(conversationId,assigneeId){await markEffect();return cwFetch(`/api/v1/accounts/${accountId()}/conversations/${conversationId}/assignments`,{method:"POST",body:JSON.stringify({assignee_id:Number(assigneeId)})})}
 export async function listCustomAttributeDefinitions(){return cwFetch(`/api/v1/accounts/${accountId()}/custom_attribute_definitions`)}
 export async function createConversationAttribute(definition){return cwFetch(`/api/v1/accounts/${accountId()}/custom_attribute_definitions`,{method:"POST",body:JSON.stringify({attribute_display_name:definition.name,attribute_display_type:definition.type??0,attribute_description:definition.description||"",attribute_key:definition.key,attribute_values:definition.values||[],attribute_model:0})})}
 export async function listWebhooks(){return cwFetch(`/api/v1/accounts/${accountId()}/webhooks`)}

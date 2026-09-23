@@ -1,11 +1,13 @@
+import {verifiedTeamAssignment,transferFailure} from './handoff.js';
+import {humanSince,timestamp} from './conversation-control.js';
 import {integrationEnabled,progressIntegration} from './integracao.js';
 import {collectIdentity,formatNucleusProgress} from './integracao-intake.js';
 import {guardIntakeMessage} from './intake-guard.js';
 import OpenAI from "openai";
 
 import {
-  assignConversationToTeam,
   getConversation,
+  getConversationMessages,
   listTeams,
   sendMessage,
   updateConversationAttributes,
@@ -1395,23 +1397,16 @@ async function handoffToSector(
       sector
     );
 
-  let assigned = false;
+  const assigned = await verifiedTeamAssignment(conversationId,teamId);
 
-  if (teamId) {
-    try {
-      await assignConversationToTeam(
-        conversationId,
-        teamId
-      );
-
-      assigned = true;
-
-    } catch (error) {
-      console.error(
-        "Falha ao atribuir equipe:",
-        error.message
-      );
-    }
+  if (!assigned) {
+    await updateConversationAttributes(conversationId,{
+      ...attrs,ia_setor:sector,ia_motivo_contato:contactReason,
+      ia_etapa:'necessidade',ia_atendimento_concluido:false,ia_encaminhamento_pendente:true,
+    });
+    await sendMessage(conversationId,transferFailure);
+    console.error('handoff_failed',{conversationId,sector});
+    return {stage:'necessidade',sector,assigned:false,retryable:true};
   }
 
   await updateConversationAttributes(
@@ -1419,6 +1414,7 @@ async function handoffToSector(
     {
       ...attrs,
 
+      ia_encaminhamento_pendente:false,
       ia_setor:
         sector,
 
@@ -1436,14 +1432,6 @@ async function handoffToSector(
     }
   );
 
-  /*
-  Sempre avisamos o cliente para onde o
-  encaminhamos, mesmo quando a atribuição
-  da equipe no Chatwoot falha internamente
-  (assigned = false). Sem isso, o cliente
-  fica sem resposta até um agente humano
-  entrar em contato manualmente.
-  */
   await sendMessage(
     conversationId,
 
@@ -1822,25 +1810,6 @@ gerava falso positivo e fazia a IA pular a
 triagem em conversas totalmente orgânicas.
 */
 
-function wasStartedByHumanAgent(conversation) {
-  const messages = Array.isArray(conversation?.messages)
-    ? [...conversation.messages]
-    : [];
-
-  messages.sort(
-    (a, b) => (a.created_at || 0) - (b.created_at || 0)
-  );
-
-  const firstMessage = messages[0];
-
-  return Boolean(
-    firstMessage &&
-      firstMessage.message_type === 1 &&
-      !firstMessage?.content_attributes?.integral_ai
-  );
-}
-
-
 export async function handleConversationStatusChanged(
   payload
 ) {
@@ -1889,6 +1858,7 @@ export async function handleConversationStatusChanged(
     {
       ...attrs,
 
+      ia_resolvido_em: new Date(payload._resolvedAt||Date.now()).toISOString(),
       ia_etapa:
         "retorno",
 
@@ -1972,19 +1942,10 @@ export async function handleIncomingMessage(
     };
   }
 
-  /*
-  ===========================================
-  CONVERSA INICIADA POR UM AGENTE HUMANO
-  ===========================================
-
-  Só faz sentido checar isso no "inicio": se a
-  IA já tinha avançado de estágio antes, foi
-  ela quem começou a conversa, não um humano.
-  */
-
+  // Atribuição automática não é intervenção. Mensagens humanas desde a última
+  // resolução pausam a IA em qualquer etapa, inclusive durante identificação.
   if (
-    stage === "inicio" &&
-    wasStartedByHumanAgent(conversation)
+    humanSince(conversation.messages||[],timestamp(attrs.ia_resolvido_em))
   ) {
     await updateConversationAttributes(
       conversationId,
@@ -2006,6 +1967,11 @@ export async function handleIncomingMessage(
     };
   }
 
+  const history = await getConversationMessages(conversationId);
+  if (humanSince(Array.isArray(history?.payload)?history.payload:Array.isArray(history)?history:[],timestamp(attrs.ia_resolvido_em))) {
+    await updateConversationAttributes(conversationId,{...attrs,ia_etapa:'encaminhado',ia_atendimento_concluido:true});
+    return {ignored:true,reason:'human_handoff_active'};
+  }
   const extracted =
     await extractCustomerText(
       payload

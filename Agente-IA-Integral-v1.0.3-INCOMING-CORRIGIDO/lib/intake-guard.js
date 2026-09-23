@@ -1,6 +1,6 @@
+import {verifiedTeamAssignment,transferFailure} from './handoff.js';
 import {integrationEnabled} from './integracao.js';
 import {
-  assignConversationToTeam,
   getConversation,
   listTeams,
   sendMessage,
@@ -129,10 +129,16 @@ async function atendimentoTeamId() {
 
 async function handoffHumanRequest(conversationId, attrs, text) {
   const teamId = await atendimentoTeamId();
-  if (teamId) await assignConversationToTeam(conversationId, teamId);
+  const assigned=await verifiedTeamAssignment(conversationId,teamId);
+  if(!assigned) {
+    await updateConversationAttributes(conversationId,{...attrs,ia_setor:'Atendimento',ia_motivo_contato:text,ia_etapa:'necessidade',ia_atendimento_concluido:false,ia_encaminhamento_pendente:true});
+    await sendMessage(conversationId,transferFailure);
+    return {handled:true,action:'human_request_transfer_failed',assigned:false,retryable:true};
+  }
 
   await updateConversationAttributes(conversationId, {
     ...attrs,
+    ia_encaminhamento_pendente:false,
     ia_setor: "Atendimento",
     ia_motivo_contato: text,
     ia_etapa: "encaminhado",

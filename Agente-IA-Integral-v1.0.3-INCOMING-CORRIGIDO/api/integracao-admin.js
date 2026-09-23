@@ -46,7 +46,8 @@ export default async function handler(req,res) {
       } else return res.status(400).json({error:'Ação inválida'});
     }
     const counts=databaseError?[]:await integrationDB('integracao_crm_conversas?select=id&limit=1');
+    const reviews=databaseError?[]:await integrationDB('integracao_ia_eventos?select=chave,event_key,erro,received_at&status=eq.review&order=received_at.desc&limit=50');
     phase='conversations';const recent=await listConversations({status:'open',page:1});
-    return res.status(200).json({ok:!databaseError,enabled:integrationEnabled(),chatwoot:installation(),conta:account(),mapeamentos:mappings,webhooks_agente:own.length,webhooks_total:list.length,subscriptions:own.map(h=>h.subscriptions),banco_conectado:!databaseError,banco_erro:databaseError,conversa_recebida:!!counts.length,conversas_recentes:rows(recent).slice(0,3).map(c=>({id:c.id,status:c.status}))});
+    return res.status(200).json({ok:!databaseError,enabled:integrationEnabled(),revisoes_ia:reviews,chatwoot:installation(),conta:account(),mapeamentos:mappings,webhooks_agente:own.length,webhooks_total:list.length,subscriptions:own.map(h=>h.subscriptions),banco_conectado:!databaseError,banco_erro:databaseError,conversa_recebida:!!counts.length,conversas_recentes:rows(recent).slice(0,3).map(c=>({id:c.id,status:c.status}))});
   } catch(e) {console.error('integracao-admin',{tipo:e.name,phase,status:e.status});return res.status(503).json({error:'Integração indisponível',phase,type:e.name,status:e.status,code:/^(integration_|chatwoot_agents_)/.test(e.message)?e.message:'upstream_error'});}
 }
