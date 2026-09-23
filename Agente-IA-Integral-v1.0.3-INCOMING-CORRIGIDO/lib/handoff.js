@@ -11,4 +11,4 @@ export async function verifiedTeamAssignment(conversationId,teamId) {
     return false;
   }
 }
-export const transferFailure='Não consegui concluir a transferência para a equipe agora. Seu pedido continua registrado nesta conversa. Por favor, tente novamente em alguns instantes.';
+export const transferFailure='Não consegui concluir a transferência para a equipe agora. Seu pedido continua registrado nesta conversa. Você pode tentar novamente por aqui.';

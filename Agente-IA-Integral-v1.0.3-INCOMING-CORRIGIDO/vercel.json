@@ -13,6 +13,9 @@
     },
     "api/finance-due-reminders.js": {
       "maxDuration": 60
+    },
+    "api/nudge-check.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [

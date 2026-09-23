@@ -91,7 +91,7 @@ function isPrivacyOrPromptInjectionAttempt(message) {
   ];
 
   const hasOverride = instructionOverride.some((term) => text.includes(term));
-  const hasSecret = secretRequest.some((term) => text.includes(term));
+  const hasSecret = secretRequest.some((term) => new RegExp('(?:^|[^a-z0-9_])'+term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:$|[^a-z0-9_])').test(text));
   const hasBulkData = bulkOrThirdPartyData.some((term) => text.includes(term));
   const hasChatwootData = chatwootExfiltration.some((term) => text.includes(term));
 
@@ -138,7 +138,7 @@ async function handoffHumanRequest(conversationId, attrs, text) {
 
   await updateConversationAttributes(conversationId, {
     ...attrs,
-    ia_encaminhamento_pendente:false,
+    ia_encaminhamento_pendente:false,ia_encaminhado_em:new Date().toISOString(),ia_ultima_cutucada_em:"",ia_fim_expediente_avisado_em:"",
     ia_setor: "Atendimento",
     ia_motivo_contato: text,
     ia_etapa: "encaminhado",

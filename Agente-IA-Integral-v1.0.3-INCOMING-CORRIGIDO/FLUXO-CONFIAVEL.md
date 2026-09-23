@@ -46,3 +46,23 @@ mesmos testes em cada pull request e push em main.
 
 Rollback: reverter o código para a versão anterior; as tabelas novas podem ser
 mantidas para preservar os registros. Não excluir a fila para fazer rollback.
+
+## Identificação e contexto
+
+A coleta conserva a necessidade original e pede apenas o campo pendente. Nome
+precisa estar explicitamente na mensagem; municípios são comparados com o catálogo
+do Integração, aceitando acentos e UF. CPF/CNPJ tem validação de dígitos. Não há
+correção aproximada de nomes nem associação só pelo nome: o vínculo continua
+exigindo telefone compatível e nome/município ou documento. Divergências com
+documento, representantes e tentativas repetidas seguem para conferência humana.
+Novos serviços e parcerias seguem ao Comercial antes de exigir cadastro.
+
+A identificação confirmada preenche nome e município oficiais no cartão do CRM.
+Não altera o cadastro mestre, responsável, negociação ou valores. A migração
+aplica esse preenchimento também aos vínculos previamente confirmados.
+
+Os avisos da rotina existente passam pela mesma fila das mensagens. A referência
+é o encaminhamento, sem reiniciar a espera após um aviso do próprio bot. Mantêm
+intervalos e interrupção humana; não prometem atendimento imediato nem dia
+específico. A varredura guarda página e posição para continuar em outra execução.
+O agendamento externo existente não é alterado por esta publicação.

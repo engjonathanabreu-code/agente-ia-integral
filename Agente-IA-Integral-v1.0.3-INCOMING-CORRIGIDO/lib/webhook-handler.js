@@ -1,3 +1,4 @@
+import {processWaitingNotice} from './wait-notices.js';
 import {syncIntegration,account} from './integracao.js';
 import {handleIncomingMessage,handleConversationStatusChanged} from './agent.js';
 import {handleAgentPresentation,resetAgentPresentation} from './presentation.js';
@@ -6,6 +7,7 @@ import {routeTemplateReplyToHuman} from './template-reply.js';
 import {execution,control,incoming,humanMessage,eventKey,conversationKey,timestamp} from './conversation-control.js';
 const respond=(res,status,body)=>{res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(body));};
 export async function processEvent(p) {
+  if(p.event==='integral_wait_check') return processWaitingNotice(p.conversation.id);
   if(!p._archived) await syncIntegration(p);
   if(process.env.AI_ENABLED==='false') return {ignored:true,reason:'ai_disabled'};
   const id=p.conversation?.id||p.id;
@@ -54,11 +56,23 @@ export default async function handler(req,res) {
     if(registered.done) return respond(res,200,{ok:true,ignored:true,reason:'duplicate_event'});
     // Small collection window lets the database order fragments before extraction.
     if(p.event==='message_created'&&incoming(p)) await new Promise(r=>setTimeout(r,1200));
-    const started=Date.now();let result;
-    while(Date.now()-started<40000) {
+    const result=await drainConversation(ctx);
+    const own=await control('status',{event_key:eventKey(p)},ctx);
+    if(['done','review'].includes(own.status)) return respond(res,200,{ok:true,result,review:own.status==='review'});
+    res.setHeader('Retry-After','5');
+    return respond(res,503,{ok:false,error:'Mensagem registrada e aguardando processamento.'});
+  } catch(e) {
+    console.error('chatwoot-processing',{code:e.message,key:id});
+    return respond(res,503,{ok:false,error:'Atendimento registrado para nova tentativa ou revisão.'});
+  }
+}
+
+export async function drainConversation(ctx,budget=40000){
+  const started=Date.now();let result;
+    while(Date.now()-started<Math.min(40000,budget)) {
       const job=await control('claim',{},ctx);
       if(!job.token) break;
-      const run={...ctx,token:job.token,eventKey:job.event_key,customerTurn:(job.payload.event==='message_created'&&incoming(job.payload))||job.payload.event==='conversation_updated',effects:false};
+      const run={...ctx,token:job.token,eventKey:job.event_key,customerTurn:(job.payload.event==='message_created'&&incoming(job.payload))||job.payload.event==='conversation_updated'||job.payload.event==='integral_wait_check',effects:false};
       try {
         result=await execution.run(run,async()=>{
           // Archive each original independently; a batch must not rewrite history.
@@ -73,12 +87,5 @@ export default async function handler(req,res) {
         result={ignored:true,reason:'human_takeover'};
       }
     }
-    const own=await control('status',{event_key:eventKey(p)},ctx);
-    if(['done','review'].includes(own.status)) return respond(res,200,{ok:true,result,review:own.status==='review'});
-    res.setHeader('Retry-After','5');
-    return respond(res,503,{ok:false,error:'Mensagem registrada e aguardando processamento.'});
-  } catch(e) {
-    console.error('chatwoot-processing',{code:e.message,key:id});
-    return respond(res,503,{ok:false,error:'Atendimento registrado para nova tentativa ou revisão.'});
-  }
+  return result;
 }
