@@ -30,9 +30,9 @@ test('não usa bairro como cidade; aceita município conhecido com UF e sem acen
 test('repete sem dado novo apenas até limite, depois preserva dados para revisão',async()=>{
  setup({ia_etapa:'identidade',ia_nome:'João Silva',ia_sem_dados_novos:2});output={};const r=await collectIdentity(1,'Já informei',attrs);assert.equal(r.review,true);assert.equal(r.attrs.ia_nome,'João Silva');
 });
-test('falha do modelo não pede nome já informado',async()=>{
+test('falha do modelo preserva nome para revisão e não pede dados novamente',async()=>{
  setup({ia_etapa:'identidade',ia_nome:'João Silva',ia_campo_pendente:'cidade'});failModel=true;
- await collectIdentity(1,'Taió',attrs);assert.match(sent[0],/município/);assert.doesNotMatch(sent[0],/nome completo|CPF/);
+ const result=await collectIdentity(1,'Taió',attrs);assert.equal(result.review,true);assert.equal(result.attrs.ia_nome,'João Silva');assert.equal(sent.length,0);
 });
 test('pedido não é perdido quando chega junto com identificação',async()=>{
  setup();output={nome:'João Silva',cidade:'Taió',documento:'',pede_andamento:false};const text='Sou João Silva de Taió e preciso de boleto';
