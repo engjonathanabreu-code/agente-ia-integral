@@ -17,8 +17,12 @@ export async function extractIdentity(text,attrs,client) {
 export async function collectIdentity(conversationId,text,attrs) {
  if(!integrationEnabled()||!['inicio','nome','cidade','identidade'].includes(attrs.ia_etapa||'inicio'))return null;
  let data;
- try{data=await extractIdentity(text,attrs);}catch{
-  await sendMessage(conversationId,'Não consegui conferir sua última mensagem. '+missingQuestion(attrs,attrs.ia_campo_pendente));return {handled:true,stage:'identidade'};
+ try{data=await extractIdentity(text,attrs);}catch(error){
+  // A technical failure must use the existing verified handoff, not ask for data again.
+  // Log only operational metadata; upstream errors can contain customer data.
+  console.error('identity_extraction_failed',{conversationId,status:Number.isInteger(error?.status)?error.status:null,
+   kind:error instanceof SyntaxError?'invalid_response':'model_unavailable'});
+  return {review:true,attrs:{...attrs,ia_pedido_original:attrs.ia_pedido_original||String(text).slice(0,2000)},reason:'identity_extraction_failed'};
  }
  if(data.representante)return {review:true,attrs:{...attrs,ia_representante:true,ia_pedido_original:attrs.ia_pedido_original||text},reason:'representative'};
  const next={...attrs,ia_nome:data.nome||(validName(attrs.ia_nome)?attrs.ia_nome:''),ia_cidade:attrs.ia_cidade||'',ia_documento:data.documento||(validDocument(attrs.ia_documento)?attrs.ia_documento:''),ia_pede_andamento:data.pede_andamento||attrs.ia_pede_andamento===true,

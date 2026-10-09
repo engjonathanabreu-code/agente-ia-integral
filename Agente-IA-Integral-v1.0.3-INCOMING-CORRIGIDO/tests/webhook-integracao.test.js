@@ -77,3 +77,26 @@ test('resposta a template mantém atribuição humana e não reinicia identifica
   assert.equal((await call(token,p)).statusCode,200);assert.equal(owner,77);assert.equal(sent.length,0);assert.equal(attrs.ia_atendimento_concluido,true);
  }finally{global.fetch=priorFetch;}
 });
+
+for(const [index,handler] of [plain,token].entries())test(`extração indisponível na rota ${index+1} encaminha sem duplicar nem repetir identificação`,async()=>{
+ sent=[];archived=[];attrs={ia_etapa:'identidade',ia_nome:'Pessoa Teste',ia_campo_pendente:'cidade',prioridade_humana:'alta'};messages=[];
+ const priorFetch=global.fetch;let teamId=null,modelCalls=0,assignments=0;
+ global.fetch=async(url,o={})=>{
+  const address=typeof url==='string'?url:url.url;
+  if(address.includes('api.openai.com')){modelCalls++;return new Response(JSON.stringify({error:{message:'Service unavailable',type:'api_error'}}),{status:503});}
+  if(address.endsWith('/teams'))return response([{id:4,name:'Atendimento'}]);
+  if(address.endsWith('/assignments')){assignments++;teamId=JSON.parse(o.body).team_id;return response({team:{id:teamId}});}
+  if(/conversations\/\d+$/.test(address))return response({id:20+index,status:'open',custom_attributes:attrs,messages,meta:{team:{id:teamId}}});
+  return priorFetch(url,o);
+ };
+ try{
+  const p={...base,id:60+index*10,conversation:{...base.conversation,id:20+index},sender:{type:'contact'},message_type:'incoming',content:'Taió',created_at:Date.now()/1000};
+  const first=await call(handler,p);assert.equal(first.statusCode,200);assert.equal(first.body.result.assigned,true);
+  assert.equal(modelCalls,1);assert.equal(assignments,1);assert.equal(attrs.ia_etapa,'encaminhado');assert.equal(attrs.ia_nome,'Pessoa Teste');assert.equal(attrs.prioridade_humana,'alta');
+  assert.equal(sent.length,1);assert.doesNotMatch(sent[0].content,/Não consegui conferir|nome completo|município|apenas o CPF/);
+  const duplicate=await call(index===0?token:plain,p);assert.equal(duplicate.body.reason,'duplicate_event');
+  assert.equal((await call(handler,{...p,id:p.id+1,content:'Já informei',created_at:p.created_at+1})).statusCode,200);
+  assert.equal(sent.length,1);assert.equal(modelCalls,1);assert.equal(assignments,1);
+  assert.deepEqual(archived.map(message=>message.conteudo),['Taió','Já informei']);
+ }finally{global.fetch=priorFetch;}
+});
