@@ -1,11 +1,11 @@
 {
   "functions": {
     "api/webhook.js": {
-      "maxDuration": 60,
+      "maxDuration": 120,
       "includeFiles": "promts.md"
     },
     "api/webhook/[token].js": {
-      "maxDuration": 60,
+      "maxDuration": 120,
       "includeFiles": "promts.md"
     },
     "api/setup.js": {
@@ -18,6 +18,7 @@
       "maxDuration": 60
     }
   },
+  "crons": [{"path":"/api/documental-check","schedule":"*/10 * * * *"}],
   "rewrites": [
     {
       "source": "/",

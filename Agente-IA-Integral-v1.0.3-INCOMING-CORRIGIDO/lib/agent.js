@@ -1865,6 +1865,7 @@ export async function handleConversationStatusChanged(
       ...attrs,
 
       ia_resolvido_em: new Date(payload._resolvedAt||Date.now()).toISOString(),
+      ...(attrs.ia_documental_ativo||attrs.ia_documental_revisao?{ia_documental_ativo:false,ia_documental_revisao:false,ia_documental_lista_hash:''}:{}),
       ia_pedido_original:'',ia_pede_andamento:false,ia_campo_pendente:'',ia_sem_dados_novos:0,ia_revisoes_identidade:0,
       ia_etapa:
         "retorno",

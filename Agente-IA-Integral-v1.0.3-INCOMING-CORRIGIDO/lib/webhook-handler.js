@@ -5,6 +5,7 @@ import {handleAgentPresentation,resetAgentPresentation} from './presentation.js'
 import {getConversation,updateConversationAttributes} from './chatwoot.js';
 import {routeTemplateReplyToHuman} from './template-reply.js';
 import {execution,control,incoming,humanMessage,eventKey,conversationKey,timestamp} from './conversation-control.js';
+import {handleDocumental} from './documental.js';
 const respond=(res,status,body)=>{res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(body));};
 export async function processEvent(p) {
   if(p.event==='integral_wait_check') return processWaitingNotice(p.conversation.id);
@@ -23,6 +24,11 @@ export async function processEvent(p) {
     await control('resolved',{at:resolvedAt});
     return result;
   }
+  if(p.event==='integral_documental_check'){
+    const state=await control('guard');
+    if(state.human)return {ignored:true,reason:'human_handoff_active'};
+    return await handleDocumental(p,{proactive:true})||{ignored:true,reason:'documental_not_eligible'};
+  }
   if(!incoming(p)) return {ignored:true,reason:'not_incoming'};
   if(p.private===true) return {ignored:true,reason:'private_message'};
   // A human template reply must keep its original agent even when AI is paused.
@@ -38,6 +44,8 @@ export async function processEvent(p) {
   if(template) return template;
   const state=await control('guard');
   if(state.human) return {ignored:true,reason:'human_handoff_active'};
+  const documental=await handleDocumental(p);
+  if(documental)return documental;
   return handleIncomingMessage(p);
 }
 export default async function handler(req,res) {
@@ -72,7 +80,7 @@ export async function drainConversation(ctx,budget=40000){
     while(Date.now()-started<Math.min(40000,budget)) {
       const job=await control('claim',{},ctx);
       if(!job.token) break;
-      const run={...ctx,token:job.token,eventKey:job.event_key,customerTurn:(job.payload.event==='message_created'&&incoming(job.payload))||job.payload.event==='conversation_updated'||job.payload.event==='integral_wait_check',effects:false};
+      const run={...ctx,token:job.token,eventKey:job.event_key,customerTurn:(job.payload.event==='message_created'&&incoming(job.payload))||job.payload.event==='conversation_updated'||job.payload.event==='integral_wait_check'||job.payload.event==='integral_documental_check',effects:false};
       try {
         result=await execution.run(run,async()=>{
           // Archive each original independently; a batch must not rewrite history.
