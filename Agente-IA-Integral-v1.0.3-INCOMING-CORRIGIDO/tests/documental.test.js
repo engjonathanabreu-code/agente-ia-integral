@@ -9,6 +9,7 @@ test('inventário confere subpastas do cliente e recusa árvore incompleta',asyn
  const original=global.fetch;let reads=0;
  global.fetch=async url=>{const q=new URL(url).searchParams.get('q');const folder=q.split("'")[1];return new Response(JSON.stringify({files:folder==='cliente'?[{id:'docs',parents:['cliente'],mimeType:'application/vnd.google-apps.folder'}]:[{id:'cpf.pdf',parents:['docs'],mimeType:'application/pdf'}]}),{headers:{'Content-Type':'application/json'}});};
  try{assert.deepEqual((await listClientFiles('cliente','token',async()=>reads++)).map(f=>f.id),['cpf.pdf']);assert.equal(reads,2);
+ await assert.rejects(listClientFiles('cliente','token',async()=>{},['docs']),/pasta_de_outro_cliente/);
  global.fetch=async()=>new Response(JSON.stringify({files:[{id:'cliente',parents:['cliente'],mimeType:'application/vnd.google-apps.folder'}]}),{headers:{'Content-Type':'application/json'}});
  await assert.rejects(listClientFiles('cliente','token'),/inventario_incompleto/);
  }finally{global.fetch=original;}
@@ -68,6 +69,7 @@ for(const mode of ['ligado','desligado_durante_upload','humano_durante_analise']
   const u=String(url),method=options.method||'GET',body=typeof options.body==='string'?JSON.parse(options.body):null;
   if(u.includes('supabase.co/rest/v1/rpc/integracao_documental_contexto'))return json(c);
   if(u.includes('supabase.co/rest/v1/integracao_documental_config'))return json([{...c.config,ativo}]);
+  if(u.includes('supabase.co/rest/v1/integracao_documental_pastas'))return json([{pasta_id:'pasta-outro-cliente'}]);
   if(u.includes('supabase.co/rest/v1/integracao_documental_arquivos')){writes.push({kind:'recibo',body});return json([{id:'arquivo-ficticio',...body}]);}
   if(u.includes('supabase.co/rest/v1/rpc/integracao_documental_registrar')){writes.push({kind:'cadastro',body});c.processo.docs.push(body.p_documento);return json(true);}
   if(u.endsWith('/conversations/9/messages')){if(method==='POST'){writes.push({kind:'mensagem',body});return json({id:20});}return json({payload:[message]});}
