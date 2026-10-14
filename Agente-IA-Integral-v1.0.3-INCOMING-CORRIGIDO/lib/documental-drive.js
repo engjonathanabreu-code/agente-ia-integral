@@ -45,10 +45,11 @@ export async function listFolder(folder,token){
  }while(pageToken);
  return all;
 }
-export async function listClientFiles(folder,token,beforeRead=async()=>{}){
+export async function listClientFiles(folder,token,beforeRead=async()=>{},otherClientFolders=[]){
  const queue=[{id:folder,depth:0}],visited=new Set(),files=[];
  while(queue.length){
   const current=queue.shift();
+  if(otherClientFolders.includes(current.id))throw new Error('drive_pasta_de_outro_cliente');
   if(visited.has(current.id)||current.depth>12||visited.size>=100)throw new Error('drive_inventario_incompleto');
   visited.add(current.id);await beforeRead();
   for(const f of await listFolder(current.id,token)){

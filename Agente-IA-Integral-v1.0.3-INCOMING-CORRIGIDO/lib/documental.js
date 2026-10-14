@@ -98,7 +98,8 @@ export async function handleDocumental(payload,{proactive=false}={}){
  try{
   await liveGuard(conversationId,context.config.versao);
   const token=await driveToken();await verifyFolder(context.pasta_id,context.config.pasta_raiz,token);
-  const inventory=await listClientFiles(context.pasta_id,token,()=>liveGuard(conversationId,context.config.versao));
+  const otherFolders=await integrationDB('integracao_documental_pastas?select=pasta_id&cliente_id=neq.'+encode(context.cliente_id));
+  const inventory=await listClientFiles(context.pasta_id,token,()=>liveGuard(conversationId,context.config.versao),otherFolders.map(f=>f.pasta_id));
   const h=await getConversationMessages(conversationId),history=Array.isArray(h.payload)?h.payload:Array.isArray(h)?h:[];
   const lastIncoming=history.filter(m=>incoming(m)&&m.private!==true).sort((a,b)=>timestamp(b.created_at)-timestamp(a.created_at))[0];
   if(!lastIncoming||Date.now()-timestamp(lastIncoming.created_at)>24*3600*1000)return {handled:true,stage:'aguardando_janela_atendimento'};
