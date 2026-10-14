@@ -4,7 +4,7 @@ import {integrationDB,installation,account} from './integracao.js';
 import {getConversation,getConversationMessages,sendMessage,updateConversationAttributes,listTeams} from './chatwoot.js';
 import {assertActive,markEffect,humanSince,timestamp,incoming} from './conversation-control.js';
 import {verifiedTeamAssignment} from './handoff.js';
-import {driveConfigured,driveToken,verifyFolder,listFolder,fetchAttachment,archiveFile,driveRequest,documentMime} from './documental-drive.js';
+import {driveConfigured,driveToken,verifyFolder,listClientFiles,fetchAttachment,archiveFile,driveRequest,documentMime} from './documental-drive.js';
 import {requisitosEtapa,DOC_TIPOS,normalizar,so} from './documental-regras/requisitos-moradores.js';
 import {REGRAS_PADRAO} from './documental-regras/regras-documentais.js';
 import {avaliarPrazoResidencia,INSTRUCAO_RESIDENCIA_SEIS_MESES,limiteResidencia,diaReferenciaResidencia} from './documental-regras/prazo-residencia.js';
@@ -98,7 +98,7 @@ export async function handleDocumental(payload,{proactive=false}={}){
  try{
   await liveGuard(conversationId,context.config.versao);
   const token=await driveToken();await verifyFolder(context.pasta_id,context.config.pasta_raiz,token);
-  const inventory=await listFolder(context.pasta_id,token);
+  const inventory=await listClientFiles(context.pasta_id,token,()=>liveGuard(conversationId,context.config.versao));
   const h=await getConversationMessages(conversationId),history=Array.isArray(h.payload)?h.payload:Array.isArray(h)?h:[];
   const lastIncoming=history.filter(m=>incoming(m)&&m.private!==true).sort((a,b)=>timestamp(b.created_at)-timestamp(a.created_at))[0];
   if(!lastIncoming||Date.now()-timestamp(lastIncoming.created_at)>24*3600*1000)return {handled:true,stage:'aguardando_janela_atendimento'};

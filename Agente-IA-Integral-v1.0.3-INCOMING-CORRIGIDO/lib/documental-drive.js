@@ -45,6 +45,21 @@ export async function listFolder(folder,token){
  }while(pageToken);
  return all;
 }
+export async function listClientFiles(folder,token,beforeRead=async()=>{}){
+ const queue=[{id:folder,depth:0}],visited=new Set(),files=[];
+ while(queue.length){
+  const current=queue.shift();
+  if(visited.has(current.id)||current.depth>12||visited.size>=100)throw new Error('drive_inventario_incompleto');
+  visited.add(current.id);await beforeRead();
+  for(const f of await listFolder(current.id,token)){
+   if(!f.parents?.includes(current.id))throw new Error('drive_inventario_divergente');
+   if(f.mimeType==='application/vnd.google-apps.folder')queue.push({id:f.id,depth:current.depth+1});
+   else files.push(f);
+   if(files.length+queue.length>5000)throw new Error('drive_inventario_excessivo');
+  }
+ }
+ return files;
+}
 export function validAttachmentURL(value,hosts){
  let u;try{u=new URL(value);}catch{throw new Error('anexo_url_invalida');}
  if(u.protocol!=='https:'||u.username||u.password||!hosts.includes(u.hostname)||u.port&&u.port!=='443')throw new Error('anexo_origem_recusada');

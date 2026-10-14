@@ -1,10 +1,18 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {documentaryIntent,pendingDocuments,validateAnalysis,GUARATUBA,handleDocumental} from '../lib/documental.js';
 import {createHash} from 'node:crypto';
-import {validAttachmentURL,documentMime,MAX_DOCUMENT_BYTES,limitedBytes,verifyFolder,archiveFile} from '../lib/documental-drive.js';
+import {validAttachmentURL,documentMime,MAX_DOCUMENT_BYTES,limitedBytes,verifyFolder,archiveFile,listClientFiles} from '../lib/documental-drive.js';
 import {cronAuthorized} from '../api/documental-check.js';
 const context=()=>({processo:{municipioId:GUARATUBA,requerente:{nome:'Pessoa fictícia',estadoCivil:'Solteiro(a)'},conjuge:{},docs:[],endereco:{},social:{},checks:{},corequerentes:[],ocupantes:[]},configuracoes:{},regras:[{id:'regra',ativa:true,tipos:['identidade'],gravidade:'bloqueia',nome:'Documento inteiro',instrucao:'Envie o documento inteiro.'}],arquivos:[]});
 const analysis=()=>({tipo:'identidade',pessoa:'requerente',legivel:true,completo:true,confianca:0.96,identidadeCompativel:true,campos:{},paginas:[1],regras:[{id:'regra',resultado:'atende'}]});
+test('inventário confere subpastas do cliente e recusa árvore incompleta',async()=>{
+ const original=global.fetch;let reads=0;
+ global.fetch=async url=>{const q=new URL(url).searchParams.get('q');const folder=q.split("'")[1];return new Response(JSON.stringify({files:folder==='cliente'?[{id:'docs',parents:['cliente'],mimeType:'application/vnd.google-apps.folder'}]:[{id:'cpf.pdf',parents:['docs'],mimeType:'application/pdf'}]}),{headers:{'Content-Type':'application/json'}});};
+ try{assert.deepEqual((await listClientFiles('cliente','token',async()=>reads++)).map(f=>f.id),['cpf.pdf']);assert.equal(reads,2);
+ global.fetch=async()=>new Response(JSON.stringify({files:[{id:'cliente',parents:['cliente'],mimeType:'application/vnd.google-apps.folder'}]}),{headers:{'Content-Type':'application/json'}});
+ await assert.rejects(listClientFiles('cliente','token'),/inventario_incompleto/);
+ }finally{global.fetch=original;}
+});
 test('financeiro, andamento, nova identificação e pedido humano seguem o agente existente',()=>{
  for(const text of ['Quero um boleto','Qual o andamento?','Quero falar com um atendente','Sou a Maria','Meu nome mudou'])assert.equal(documentaryIntent(text,[],{ia_documental_ativo:true}),false,text);
  assert.equal(documentaryIntent('Vou enviar os documentos',[],{}),true);
