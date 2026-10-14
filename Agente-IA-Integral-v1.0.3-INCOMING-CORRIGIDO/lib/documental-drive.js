@@ -1,8 +1,10 @@
 import {createSign,createHash,randomUUID} from 'node:crypto';
+import {scriptConfigured,scriptOperation,scriptReadOperation} from './documental-script.js';
 
 export const MAX_DOCUMENT_BYTES=20*1024*1024;
-export const driveConfigured=()=>!!(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON||(process.env.GOOGLE_DRIVE_CLIENT_ID&&process.env.GOOGLE_DRIVE_CLIENT_SECRET&&process.env.GOOGLE_DRIVE_REFRESH_TOKEN));
+export const driveConfigured=()=>!!(scriptConfigured()||process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON||(process.env.GOOGLE_DRIVE_CLIENT_ID&&process.env.GOOGLE_DRIVE_CLIENT_SECRET&&process.env.GOOGLE_DRIVE_REFRESH_TOKEN));
 export async function driveToken(){
+ if(scriptConfigured())return 'google-script';
  let body;
  if(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON){
   const key=JSON.parse(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON),now=Math.floor(Date.now()/1000);
@@ -19,6 +21,12 @@ export async function driveToken(){
  const value=await r.json();if(!value.access_token)throw new Error('drive_autorizacao_indisponivel');return value.access_token;
 }
 export async function driveRequest(path,token,options={}){
+ if(token==='google-script'){
+  const request=scriptReadOperation(path,options),data=await scriptOperation(request.op,request.data);
+  if(!options.binary)return data;
+  if(typeof data.base64!=='string'||!/^[A-Za-z0-9+/]*={0,2}$/.test(data.base64)||data.base64.length>28*1024*1024)throw new Error('drive_documento_invalido');
+  const bytes=Buffer.from(data.base64,'base64');if(!bytes.length||bytes.length>MAX_DOCUMENT_BYTES)throw new Error('documento_muito_grande');documentMime(bytes);return bytes;
+ }
  const r=await fetch('https://www.googleapis.com/drive/v3/'+path,{...options,headers:{Authorization:'Bearer '+token,...options.headers},signal:AbortSignal.timeout(15000)});
  if(!r.ok)throw new Error('drive_operacao_'+r.status);
  return options.binary?limitedBytes(r):r.json();
@@ -93,6 +101,11 @@ export async function archiveFile({folder,clientId,origin,name,bytes,mime,hash,t
  // Reconcilia também um upload cujo recibo local não chegou a ser salvo.
  const prior=(await listFolder(folder,token)).find(f=>f.appProperties?.integral_client_id===clientId&&(f.appProperties?.integral_origin===origin||f.appProperties?.integral_sha256===hash));
  if(prior){if(prior.md5Checksum!==createHash('md5').update(bytes).digest('hex'))throw new Error('drive_reconciliacao_divergente');return prior;}
+ if(token==='google-script'){
+  await beforeEffect();const f=await scriptOperation('upload',{folder,clientId,origin,name,base64:bytes.toString('base64'),mime,hash});
+  const check=await driveRequest('files/'+encodeURIComponent(f.id)+'?supportsAllDrives=true&fields=id,name,parents,md5Checksum',token);
+  if(!check.parents?.includes(folder)||check.md5Checksum!==createHash('md5').update(bytes).digest('hex'))throw new Error('drive_recibo_nao_confirmado');return check;
+ }
  const boundary='integral-'+randomUUID();
  const metadata={name:String(name||'documento').replace(/[\r\n\u0000]/g,'').slice(0,180),parents:[folder],appProperties:{integral_client_id:clientId,integral_origin:origin,integral_sha256:hash}};
  const body=Buffer.concat([Buffer.from('--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(metadata)+'\r\n--'+boundary+'\r\nContent-Type: '+mime+'\r\n\r\n'),bytes,Buffer.from('\r\n--'+boundary+'--\r\n')]);
