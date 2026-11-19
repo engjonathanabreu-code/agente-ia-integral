@@ -2,7 +2,7 @@ import {commercialIntent,missingQuestion} from './intake-language.js';
 import {verifiedTeamAssignment,transferFailure} from './handoff.js';
 import {humanSince,timestamp} from './conversation-control.js';
 import {integrationEnabled,progressIntegration} from './integracao.js';
-import {collectIdentity,formatNucleusProgress} from './integracao-intake.js';
+import {collectIdentity} from './integracao-intake.js';
 import {guardIntakeMessage} from './intake-guard.js';
 import OpenAI from "openai";
 
@@ -134,6 +134,14 @@ INTENÇÃO DE ANDAMENTO
 
 function isAndamentoIntent(message) {
   const text = normalizeText(message);
+
+  // Consultas naturais do processo existente, inclusive depois da identificação.
+  // Não tratar apenas “escritura/processo” como consulta: pode ser novo serviço.
+  if (/\bcomo (?:anda|esta|vai)\s+(?:(?:o|a|meu|minha|nosso|nossa)\s+)*(?:processo|escritura|matricula)\b/.test(text) ||
+      /\b(?:situacao|status)\s+(?:d[oa]\s+)?(?:(?:meu|minha|nosso|nossa)\s+)?(?:processo|escritura|matricula)\b/.test(text)) return true;
+
+  if (/\bem que pe\s+(?:esta\s+)?(?:(?:o|a|meu|minha|nosso|nossa)\s+)*(?:processo|escritura|matricula)\b/.test(text) ||
+      /\bnovidades?\s+(?:d[oa]|sobre)\s+(?:(?:o|a|meu|minha|nosso|nossa)\s+)*(?:processo|escritura|matricula)\b/.test(text)) return true;
 
   const terms = [
     "andamento",
@@ -372,35 +380,6 @@ async function getClientProgress(conversationId, attrs) {
 
 /*
 ===========================================
-ORIENTAÇÃO INTERNA DA IA
-===========================================
-*/
-
-function customerTextFromAiOrientation(value) {
-  const raw = String(value || "").trim();
-
-  if (!raw) return null;
-
-  const text = normalizeText(raw);
-
-  if (
-    text.includes("empresa fez o possivel") ||
-    text.includes("empresa fez o possível") ||
-    text.includes("acelerar o processo") ||
-    text.includes("dar celeridade")
-  ) {
-    return "A empresa realizou todas as providências ao seu alcance para dar celeridade ao processo e, neste momento, aguardamos a atuação do órgão responsável.";
-  }
-
-  /*
-  Qualquer orientação não reconhecida é tratada
-  como instrução interna e não aparece ao cliente.
-  */
-  return null;
-}
-
-/*
-===========================================
 FORMATA ANDAMENTO
 ===========================================
 */
@@ -414,7 +393,7 @@ function progressResponseText(data) {
   const progress =
     data?.andamento_atual;
 
-  if (!progress) {
+  if (!progress || ![progress.etapa, progress.status_operacional, progress.descricao_cliente].some(value => typeof value === "string" && value.trim())) {
     return null;
   }
 
@@ -468,15 +447,11 @@ function progressResponseText(data) {
     }
   }
 
-  const orientationText =
-    customerTextFromAiOrientation(
-      progress.orientacao_ia
-    );
-
-  if (orientationText) {
-    parts.push(
-      orientationText
-    );
+  // Only official display fields. Instructions are never sent to a model or customer.
+  const updated = String(progress.atualizado_em || '').slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(updated)) {
+    const date = new Date(`${updated}T12:00:00`);
+    if (!Number.isNaN(date.getTime())) parts.push(`Atualização registrada: ${new Intl.DateTimeFormat('pt-BR').format(date)}.`);
   }
 
   parts.push(
@@ -503,10 +478,21 @@ async function tryAnswerProgress(
     return null;
   }
 
-  const result =
-    await getClientProgress(
-      conversationId, attrs
-    );
+  // A confirmed interlocutor is not confirmation of a relative's identity.
+  const thirdParty = /\b(?:d[oa]|para|sobre)\s+(?:o\s+|a\s+)?(?:meu|minha|nosso|nossa)\s+(?:mae|pai|filh[oa]|net[oa]|espos[oa]|marido|irma[oa]|av[oó]|cliente|vizinh[oa])\b/.test(normalizeText(text));
+  if (attrs.ia_representante === true || thirdParty) {
+    return {handled: false, forceHandoff: true, reason: 'representative',
+      handoffMessage: 'Vou encaminhar para a equipe conferir o cadastro do titular e continuar o atendimento.'};
+  }
+
+  let result;
+  try {
+    result = await getClientProgress(conversationId, attrs);
+  } catch {
+    // RPC failures must use the existing verified handoff, not leak upstream data.
+    console.error('progress_lookup_failed', {conversationId});
+    result = {ok: false};
+  }
 
   if (
     !result ||
@@ -523,7 +509,7 @@ async function tryAnswerProgress(
 
   if (result.identity_pending) {
     if (result.acao!=='revisao_equipe'&&!attrs.ia_documento&&Number(attrs.ia_revisoes_identidade||0)<1) {
-      await updateConversationAttributes(conversationId,{...attrs,ia_etapa:'identidade',ia_pede_andamento:true,ia_campo_pendente:result.campos_faltantes?.[0]||'documento',ia_revisoes_identidade:Number(attrs.ia_revisoes_identidade||0)+1});
+      await updateConversationAttributes(conversationId,{...attrs,ia_etapa:'identidade',ia_pede_andamento:true,ia_pedido_original:attrs.ia_pedido_original||text,ia_campo_pendente:result.campos_faltantes?.[0]||'documento',ia_revisoes_identidade:Number(attrs.ia_revisoes_identidade||0)+1});
       await sendMessage(conversationId,result.pergunta||missingQuestion(attrs,'documento'));
       return {handled:true,identity_pending:true};
     }
@@ -573,8 +559,7 @@ async function tryAnswerProgress(
     };
   }
 
-  const fallback = progressResponseText(result);
-  const message = integrationEnabled() && fallback ? await formatNucleusProgress(result,fallback) : fallback;
+  const message = progressResponseText(result);
 
   if (!message) {
     return {
@@ -2476,7 +2461,8 @@ Me informe a cidade relacionada ao atendimento, por favor.`
     /*
     MUITO IMPORTANTE:
 
-    Aqui o cliente já escolheu o setor.
+    Quando há setor selecionado, preservamos a escolha humana.
+    Sem setor, um motivo genérico ainda pode consultar andamento com validação.
 
     Portanto, se ele disser:
     "quero falar sobre o andamento do processo"
@@ -2493,7 +2479,7 @@ Me informe a cidade relacionada ao atendimento, por favor.`
       text,
       {
         allowProgress:
-          false,
+          !attrs.ia_setor,
       }
     );
   }
